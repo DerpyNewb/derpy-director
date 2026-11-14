@@ -1,0 +1,23 @@
+__pycache__/
+*.pyc
+*.pack
+*.bak*
+.skilltree_cache/
+
+# CA's files, and anything drawn from the game, are never published. They ship in the .pack only, or are read from
+# your own install: Modding Files/reference/ holds CA's scripting docs and shipped scripts.
+Modding Files/reference/
+*.loc
+*.txt
+*.png
+*.gif
+*.mp4
+*.dds
+*.jpg
+*.jpeg
+*.webp
+*.tga
+*.bin
+*.xlsx
+*.json
+*.html

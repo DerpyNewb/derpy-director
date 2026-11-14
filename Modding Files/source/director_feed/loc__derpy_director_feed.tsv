@@ -1,0 +1,212 @@
+key	text	tooltip
+#Loc;1;text/db/derpy_director_feed.loc
+event_feed_strings_text_derpy_director_feed_grudge_title	A Wrong Remembered	false
+event_feed_strings_text_derpy_director_feed_grudge_primary	A settlement has been attacked. Powers nearby who already had reason to hate the attacker have taken note, and their opinion of them has worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_secondary	They will not forget it. The grudge now colours every dealing they have with the attacker.	false
+event_feed_strings_text_derpy_director_feed_pact_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_primary	Two powers that share an enemy have signed a defensive alliance. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_secondary	The attacker now faces two swords where yesterday there was one.	false
+event_feed_strings_text_derpy_director_feed_raid_title	A Convoy Seized	false
+event_feed_strings_text_derpy_director_feed_raid_primary	An army has seized a convoy of goods on the road. Powers nearby who already had reason to hate the raider have taken note, and their opinion of them has worsened.	false
+event_feed_strings_text_derpy_director_feed_raid_secondary	Word travels the trade roads faster than any cart, and it loses nothing in the telling.	false
+event_feed_strings_text_derpy_director_feed_guild_title	The Faithful Turn Away	false
+event_feed_strings_text_derpy_director_feed_guild_primary	Your armies have spilled the blood of your own kin, and your temple has heard of it. Your Reputation with the temple has fallen.	false
+event_feed_strings_text_derpy_director_feed_guild_secondary	The priests forgive slowly. What was lost must be earned back in the temple's service.	false
+event_feed_strings_text_derpy_director_feed_rising_title	Vultures Gather	false
+event_feed_strings_text_derpy_director_feed_rising_primary	Your realm has split, and its neighbours have noticed. Powers that already counted you an enemy now think even less of you.	false
+event_feed_strings_text_derpy_director_feed_rising_secondary	A divided realm is a tempting one, and its enemies are always the first to see the cracks.	false
+event_feed_strings_text_derpy_director_feed_temper_rising_title	A Restless World	false
+event_feed_strings_text_derpy_director_feed_temper_rising_primary	The powers of this world answer bloodshed in waves. For a time they are quick to take offence and band together against an aggressor, then they settle for a while before stirring again.	false
+event_feed_strings_text_derpy_director_feed_temper_rising_secondary	Watch for the calm. It never lasts.	false
+event_feed_strings_text_derpy_director_feed_temper_patient_title	A Patient World	false
+event_feed_strings_text_derpy_director_feed_temper_patient_primary	The powers of this world are slow to anger. Most wrongs pass with little said, but every so often they turn on an aggressor together.	false
+event_feed_strings_text_derpy_director_feed_temper_patient_secondary	A long silence is not the same as forgiveness.	false
+event_feed_strings_text_derpy_director_feed_temper_wild_title	A Fickle World	false
+event_feed_strings_text_derpy_director_feed_temper_wild_primary	The powers of this world cannot be predicted. One wrong goes unremarked, and the next sets half the region against the aggressor.	false
+event_feed_strings_text_derpy_director_feed_temper_wild_secondary	Nobody knows what they will do next, least of all you.	false
+event_feed_strings_text_derpy_director_feed_blood_title	Blood in the Water	false
+event_feed_strings_text_derpy_director_feed_blood_primary	Your enemy has lost ground, and the powers around it have noticed. Those who already counted it an enemy have turned against it too.	false
+event_feed_strings_text_derpy_director_feed_blood_secondary	A wounded beast draws more than one hunter.	false
+event_feed_strings_text_derpy_director_feed_betrayal_title	An Oath Broken	false
+event_feed_strings_text_derpy_director_feed_betrayal_primary	A treaty has been broken, and the powers nearby have noticed. Those who already distrusted the oath-breaker now think even less of them.	false
+event_feed_strings_text_derpy_director_feed_betrayal_secondary	Word of a broken oath travels faster than any army.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh2_dlc09_sc_tmb_tomb_kings_title	Set Down by the Mortuary Cult	false
+event_feed_strings_text_derpy_director_feed_grudge_wh2_dlc09_sc_tmb_tomb_kings_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh2_dlc09_sc_tmb_tomb_kings}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh2_dlc09_sc_tmb_tomb_kings_secondary	A liche priest inscribes the offence on a tablet. Nehekhara has waited longer than this to settle far smaller slights.	false
+event_feed_strings_text_derpy_director_feed_pact_wh2_dlc09_sc_tmb_tomb_kings_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_wh2_dlc09_sc_tmb_tomb_kings_primary	The {{tr:cultures_subcultures_name_wh2_dlc09_sc_tmb_tomb_kings}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_wh2_dlc09_sc_tmb_tomb_kings_secondary	The attacker now faces two swords where yesterday there was one.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh2_dlc11_sc_cst_vampire_coast_title	It Reaches the Coast	false
+event_feed_strings_text_derpy_director_feed_grudge_wh2_dlc11_sc_cst_vampire_coast_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh2_dlc11_sc_cst_vampire_coast}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh2_dlc11_sc_cst_vampire_coast_secondary	The story is worth a drink in every rotten port, and it grows bigger with every telling.	false
+event_feed_strings_text_derpy_director_feed_pact_wh2_dlc11_sc_cst_vampire_coast_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_wh2_dlc11_sc_cst_vampire_coast_primary	The {{tr:cultures_subcultures_name_wh2_dlc11_sc_cst_vampire_coast}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_wh2_dlc11_sc_cst_vampire_coast_secondary	The attacker now faces two swords where yesterday there was one.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh2_main_sc_def_dark_elves_title	Noted in Naggaroth	false
+event_feed_strings_text_derpy_director_feed_grudge_wh2_main_sc_def_dark_elves_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh2_main_sc_def_dark_elves}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh2_main_sc_def_dark_elves_secondary	The Druchii find the news useful rather than shocking, and file it where such leverage is kept.	false
+event_feed_strings_text_derpy_director_feed_pact_wh2_main_sc_def_dark_elves_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_wh2_main_sc_def_dark_elves_primary	The {{tr:cultures_subcultures_name_wh2_main_sc_def_dark_elves}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_wh2_main_sc_def_dark_elves_secondary	The attacker now faces two swords where yesterday there was one.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh2_main_sc_hef_high_elves_title	The Phoenix Court Is Informed	false
+event_feed_strings_text_derpy_director_feed_grudge_wh2_main_sc_hef_high_elves_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh2_main_sc_hef_high_elves}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh2_main_sc_hef_high_elves_secondary	They discuss it in measured tones. The answer will take a century to arrive, and it has already been decided.	false
+event_feed_strings_text_derpy_director_feed_pact_wh2_main_sc_hef_high_elves_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_wh2_main_sc_hef_high_elves_primary	The {{tr:cultures_subcultures_name_wh2_main_sc_hef_high_elves}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_wh2_main_sc_hef_high_elves_secondary	The attacker now faces two swords where yesterday there was one.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh2_main_sc_lzd_lizardmen_title	The Great Plan Is Consulted	false
+event_feed_strings_text_derpy_director_feed_grudge_wh2_main_sc_lzd_lizardmen_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh2_main_sc_lzd_lizardmen}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh2_main_sc_lzd_lizardmen_secondary	A Slann stirs long enough to mark a deviation, and the geomantic web records what the warm-blooded have done.	false
+event_feed_strings_text_derpy_director_feed_pact_wh2_main_sc_lzd_lizardmen_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_wh2_main_sc_lzd_lizardmen_primary	The {{tr:cultures_subcultures_name_wh2_main_sc_lzd_lizardmen}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_wh2_main_sc_lzd_lizardmen_secondary	The attacker now faces two swords where yesterday there was one.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh2_main_sc_skv_skaven_title	Squeaked of in the Under-Empire	false
+event_feed_strings_text_derpy_director_feed_grudge_wh2_main_sc_skv_skaven_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh2_main_sc_skv_skaven}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh2_main_sc_skv_skaven_secondary	The tale is traded in the tunnels and embellished at every telling. What survives of it is the part about weakness.	false
+event_feed_strings_text_derpy_director_feed_pact_wh2_main_sc_skv_skaven_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_wh2_main_sc_skv_skaven_primary	The {{tr:cultures_subcultures_name_wh2_main_sc_skv_skaven}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_wh2_main_sc_skv_skaven_secondary	The attacker now faces two swords where yesterday there was one.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_dlc23_sc_chd_chaos_dwarfs_title	Entered in the Ledgers of Zharr	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_dlc23_sc_chd_chaos_dwarfs_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh3_dlc23_sc_chd_chaos_dwarfs}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_dlc23_sc_chd_chaos_dwarfs_secondary	The loss is recorded in slaves and in coin. Both figures will be collected in time, with interest.	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_dlc23_sc_chd_chaos_dwarfs_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_dlc23_sc_chd_chaos_dwarfs_primary	The {{tr:cultures_subcultures_name_wh3_dlc23_sc_chd_chaos_dwarfs}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_dlc23_sc_chd_chaos_dwarfs_secondary	The attacker now faces two swords where yesterday there was one.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_dlc29_sc_nag_undead_legions_title	Nagash Remembers	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_dlc29_sc_nag_undead_legions_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh3_dlc29_sc_nag_undead_legions}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_dlc29_sc_nag_undead_legions_secondary	The Great Necromancer forgets nothing. Every life the attacker takes is one more soul he means to claim for himself.	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_dlc29_sc_nag_undead_legions_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_dlc29_sc_nag_undead_legions_primary	The {{tr:cultures_subcultures_name_wh3_dlc29_sc_nag_undead_legions}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_dlc29_sc_nag_undead_legions_secondary	The attacker now faces two swords where yesterday there was one.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_pro_sc_kho_khorne_title	Blood Is Counted	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_pro_sc_kho_khorne_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh3_main_pro_sc_kho_khorne}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_pro_sc_kho_khorne_secondary	Khorne cares not from whence the blood flows, but his servants keep careful count of who is spilling it, and where.	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_pro_sc_kho_khorne_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_pro_sc_kho_khorne_primary	The {{tr:cultures_subcultures_name_wh3_main_pro_sc_kho_khorne}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_pro_sc_kho_khorne_secondary	The attacker now faces two swords where yesterday there was one.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_pro_sc_ksl_kislev_title	The Motherland Takes Note	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_pro_sc_ksl_kislev_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh3_main_pro_sc_ksl_kislev}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_pro_sc_ksl_kislev_secondary	The news travels the ice roads, and the boyars add another name to the long list of things Kislev does not forgive.	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_pro_sc_ksl_kislev_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_pro_sc_ksl_kislev_primary	The {{tr:cultures_subcultures_name_wh3_main_pro_sc_ksl_kislev}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_pro_sc_ksl_kislev_secondary	The attacker now faces two swords where yesterday there was one.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_pro_sc_tze_tzeentch_title	A Thread Is Pulled	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_pro_sc_tze_tzeentch_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh3_main_pro_sc_tze_tzeentch}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_pro_sc_tze_tzeentch_secondary	The change is noted and immediately turned to use. Tzeentch's servants had other plans for that town, and now they have new ones.	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_pro_sc_tze_tzeentch_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_pro_sc_tze_tzeentch_primary	The {{tr:cultures_subcultures_name_wh3_main_pro_sc_tze_tzeentch}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_pro_sc_tze_tzeentch_secondary	The attacker now faces two swords where yesterday there was one.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_sc_cth_cathay_title	Filed by the Celestial Bureaucracy	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_sc_cth_cathay_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh3_main_sc_cth_cathay}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_sc_cth_cathay_secondary	A clerk enters the deed in a ledger, stamped and sealed. The Dragon Emperor's officials are slow, but they are patient.	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_sc_cth_cathay_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_sc_cth_cathay_primary	The {{tr:cultures_subcultures_name_wh3_main_sc_cth_cathay}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_sc_cth_cathay_secondary	The attacker now faces two swords where yesterday there was one.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_sc_dae_daemons_title	The Realms Take Note	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_sc_dae_daemons_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh3_main_sc_dae_daemons}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_sc_dae_daemons_secondary	In the Realm of Chaos the deed registers as a small and pleasing tremor, and something turns its attention outward.	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_sc_dae_daemons_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_sc_dae_daemons_primary	The {{tr:cultures_subcultures_name_wh3_main_sc_dae_daemons}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_sc_dae_daemons_secondary	The attacker now faces two swords where yesterday there was one.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_sc_kho_khorne_title	Blood Is Counted	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_sc_kho_khorne_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh3_main_sc_kho_khorne}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_sc_kho_khorne_secondary	Khorne cares not from whence the blood flows, but his servants keep careful count of who is spilling it, and where.	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_sc_kho_khorne_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_sc_kho_khorne_primary	The {{tr:cultures_subcultures_name_wh3_main_sc_kho_khorne}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_sc_kho_khorne_secondary	The attacker now faces two swords where yesterday there was one.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_sc_ksl_kislev_title	The Motherland Takes Note	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_sc_ksl_kislev_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh3_main_sc_ksl_kislev}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_sc_ksl_kislev_secondary	The news travels the ice roads, and the boyars add another name to the long list of things Kislev does not forgive.	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_sc_ksl_kislev_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_sc_ksl_kislev_primary	The {{tr:cultures_subcultures_name_wh3_main_sc_ksl_kislev}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_sc_ksl_kislev_secondary	The attacker now faces two swords where yesterday there was one.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_sc_nur_nurgle_title	Grandfather Smiles	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_sc_nur_nurgle_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh3_main_sc_nur_nurgle}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_sc_nur_nurgle_secondary	War breeds fever and famine. The gift is already spreading, and Nurgle's children are grateful for the invitation.	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_sc_nur_nurgle_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_sc_nur_nurgle_primary	The {{tr:cultures_subcultures_name_wh3_main_sc_nur_nurgle}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_sc_nur_nurgle_secondary	The attacker now faces two swords where yesterday there was one.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_sc_ogr_ogre_kingdoms_title	The Tribes Hear of It	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_sc_ogr_ogre_kingdoms_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh3_main_sc_ogr_ogre_kingdoms}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_sc_ogr_ogre_kingdoms_secondary	The Ogres take a keen interest in anyone strong enough to take what they want. Such people are either worth hiring or worth eating.	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_sc_ogr_ogre_kingdoms_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_sc_ogr_ogre_kingdoms_primary	The {{tr:cultures_subcultures_name_wh3_main_sc_ogr_ogre_kingdoms}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_sc_ogr_ogre_kingdoms_secondary	The attacker now faces two swords where yesterday there was one.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_sc_sla_slaanesh_title	Noted with Interest	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_sc_sla_slaanesh_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh3_main_sc_sla_slaanesh}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_sc_sla_slaanesh_secondary	The excess of it is appreciated as craftsmanship. Slaanesh's followers judge an attack by its style, and this one has been judged.	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_sc_sla_slaanesh_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_sc_sla_slaanesh_primary	The {{tr:cultures_subcultures_name_wh3_main_sc_sla_slaanesh}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_sc_sla_slaanesh_secondary	The attacker now faces two swords where yesterday there was one.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_sc_tze_tzeentch_title	A Thread Is Pulled	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_sc_tze_tzeentch_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh3_main_sc_tze_tzeentch}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh3_main_sc_tze_tzeentch_secondary	The change is noted and immediately turned to use. Tzeentch's servants had other plans for that town, and now they have new ones.	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_sc_tze_tzeentch_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_sc_tze_tzeentch_primary	The {{tr:cultures_subcultures_name_wh3_main_sc_tze_tzeentch}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_wh3_main_sc_tze_tzeentch_secondary	The attacker now faces two swords where yesterday there was one.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_dlc03_sc_bst_beastmen_title	The Herdstones Know	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_dlc03_sc_bst_beastmen_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh_dlc03_sc_bst_beastmen}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_dlc03_sc_bst_beastmen_secondary	The beasts smell burning and ruin, and they are drawn to it the way flies are drawn to meat.	false
+event_feed_strings_text_derpy_director_feed_pact_wh_dlc03_sc_bst_beastmen_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_wh_dlc03_sc_bst_beastmen_primary	The {{tr:cultures_subcultures_name_wh_dlc03_sc_bst_beastmen}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_wh_dlc03_sc_bst_beastmen_secondary	The attacker now faces two swords where yesterday there was one.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_dlc05_sc_wef_wood_elves_title	The Forest Stirs	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_dlc05_sc_wef_wood_elves_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh_dlc05_sc_wef_wood_elves}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_dlc05_sc_wef_wood_elves_secondary	Word passes root to root. The Asrai care nothing for the settlement and a great deal about who is now strong enough to take one.	false
+event_feed_strings_text_derpy_director_feed_pact_wh_dlc05_sc_wef_wood_elves_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_wh_dlc05_sc_wef_wood_elves_primary	The {{tr:cultures_subcultures_name_wh_dlc05_sc_wef_wood_elves}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_wh_dlc05_sc_wef_wood_elves_secondary	The attacker now faces two swords where yesterday there was one.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_dlc08_sc_nor_norsca_title	The Skalds Have a New Verse	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_dlc08_sc_nor_norsca_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh_dlc08_sc_nor_norsca}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_dlc08_sc_nor_norsca_secondary	It is sung badly and often. Whether the aggressor is a rival or an example depends entirely on who is listening.	false
+event_feed_strings_text_derpy_director_feed_pact_wh_dlc08_sc_nor_norsca_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_wh_dlc08_sc_nor_norsca_primary	The {{tr:cultures_subcultures_name_wh_dlc08_sc_nor_norsca}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_wh_dlc08_sc_nor_norsca_secondary	The attacker now faces two swords where yesterday there was one.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_main_sc_brt_bretonnia_title	A Matter of Honour	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_main_sc_brt_bretonnia_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh_main_sc_brt_bretonnia}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_main_sc_brt_bretonnia_secondary	The tale is told at table. Knights who have never seen the place have already sworn it will be answered.	false
+event_feed_strings_text_derpy_director_feed_pact_wh_main_sc_brt_bretonnia_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_wh_main_sc_brt_bretonnia_primary	The {{tr:cultures_subcultures_name_wh_main_sc_brt_bretonnia}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_wh_main_sc_brt_bretonnia_secondary	The attacker now faces two swords where yesterday there was one.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_main_sc_chs_chaos_title	The Host Marks It	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_main_sc_chs_chaos_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh_main_sc_chs_chaos}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_main_sc_chs_chaos_secondary	Ambition is the only currency here, and somebody has just spent a great deal of it where everyone could see.	false
+event_feed_strings_text_derpy_director_feed_pact_wh_main_sc_chs_chaos_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_wh_main_sc_chs_chaos_primary	The {{tr:cultures_subcultures_name_wh_main_sc_chs_chaos}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_wh_main_sc_chs_chaos_secondary	The attacker now faces two swords where yesterday there was one.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_main_sc_dwf_dwarfs_title	A Grudge Is Written	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_main_sc_dwf_dwarfs_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh_main_sc_dwf_dwarfs}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_main_sc_dwf_dwarfs_secondary	A scribe of the Dammaz Kron has already dipped his pen, and the entry will outlast every living witness to it.	false
+event_feed_strings_text_derpy_director_feed_pact_wh_main_sc_dwf_dwarfs_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_wh_main_sc_dwf_dwarfs_primary	The {{tr:cultures_subcultures_name_wh_main_sc_dwf_dwarfs}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_wh_main_sc_dwf_dwarfs_secondary	The attacker now faces two swords where yesterday there was one.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_main_sc_emp_empire_title	Word Reaches the Empire	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_main_sc_emp_empire_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh_main_sc_emp_empire}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_main_sc_emp_empire_secondary	Couriers are already riding for the nearest Elector. It will be read out in his hall, and the Empire keeps its records.	false
+event_feed_strings_text_derpy_director_feed_pact_wh_main_sc_emp_empire_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_wh_main_sc_emp_empire_primary	The {{tr:cultures_subcultures_name_wh_main_sc_emp_empire}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_wh_main_sc_emp_empire_secondary	The attacker now faces two swords where yesterday there was one.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_main_sc_grn_greenskins_title	Word Gets Round da Boyz	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_main_sc_grn_greenskins_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh_main_sc_grn_greenskins}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_main_sc_grn_greenskins_secondary	It gets retold wrong and louder every time. The part about a good scrap going spare always survives.	false
+event_feed_strings_text_derpy_director_feed_pact_wh_main_sc_grn_greenskins_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_wh_main_sc_grn_greenskins_primary	The {{tr:cultures_subcultures_name_wh_main_sc_grn_greenskins}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_wh_main_sc_grn_greenskins_secondary	The attacker now faces two swords where yesterday there was one.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_main_sc_grn_savage_orcs_title	Word Gets Round da Boyz	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_main_sc_grn_savage_orcs_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh_main_sc_grn_savage_orcs}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_main_sc_grn_savage_orcs_secondary	It gets retold wrong and louder every time. The part about a good scrap going spare always survives.	false
+event_feed_strings_text_derpy_director_feed_pact_wh_main_sc_grn_savage_orcs_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_wh_main_sc_grn_savage_orcs_primary	The {{tr:cultures_subcultures_name_wh_main_sc_grn_savage_orcs}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_wh_main_sc_grn_savage_orcs_secondary	The attacker now faces two swords where yesterday there was one.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_main_sc_teb_teb_title	The Border Princes Hear	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_main_sc_teb_teb_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh_main_sc_teb_teb}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_main_sc_teb_teb_secondary	Here such news is a warning rather than an outrage. Everyone in these lands is one bad season from the same fate.	false
+event_feed_strings_text_derpy_director_feed_pact_wh_main_sc_teb_teb_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_wh_main_sc_teb_teb_primary	The {{tr:cultures_subcultures_name_wh_main_sc_teb_teb}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_wh_main_sc_teb_teb_secondary	The attacker now faces two swords where yesterday there was one.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_main_sc_vmp_vampire_counts_title	The Dead Are Told	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_main_sc_vmp_vampire_counts_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh_main_sc_vmp_vampire_counts}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
+event_feed_strings_text_derpy_director_feed_grudge_wh_main_sc_vmp_vampire_counts_secondary	In the silence of the crypts the news is welcome. Battles leave bodies, and bodies are a resource.	false
+event_feed_strings_text_derpy_director_feed_pact_wh_main_sc_vmp_vampire_counts_title	Common Cause	false
+event_feed_strings_text_derpy_director_feed_pact_wh_main_sc_vmp_vampire_counts_primary	The {{tr:cultures_subcultures_name_wh_main_sc_vmp_vampire_counts}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
+event_feed_strings_text_derpy_director_feed_pact_wh_main_sc_vmp_vampire_counts_secondary	The attacker now faces two swords where yesterday there was one.	false

@@ -1,0 +1,656 @@
+"""Break the Director's rules one at a time and prove the selftest notices.
+
+    py tools/mutate_director.py             run every mutant
+    py tools/mutate_director.py --selftest  prove the runner reports a survivor and a stale anchor
+
+Each mutant is a plausible implementation mistake, not a typo: the guard somebody forgets, the
+clamp somebody thinks is redundant. The mutation goes into the SHIPPED Lua and is restored in a
+finally. A STALE ANCHOR is a finding, not a skip - it means the code a mutant was aimed at has
+moved, and nobody has checked whether the assertion aimed at it moved too.
+"""
+import os
+import subprocess
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SCRIPT = os.path.join(ROOT, "Modding Files", "pack", "script", "campaign", "mod",
+                      "derpy_director.lua")
+BUILD = os.path.join(ROOT, "tools", "build_director.py")
+
+# A real backslash, built here so that nothing between the shell, the tool layer and
+# Python can collapse it. Writing "\\n" in a heredoc'd source has
+# produced a literal newline in this file twice.
+B = chr(92)
+NL, TAB = B + "n", B + "t"
+
+MUTANTS = [
+    # ---- the runaway step and confederations (2026-11-14) ----
+    ("a tier starts above its ratio, not at it",
+     "if ratio >= TIER_RATIOS[i] then tier = i end", "if ratio > TIER_RATIOS[i] then tier = i end"),
+    ("the exit band holds the old tier, not the minimum",
+     "if current > 0 and tier == 0 then return math.min(current, 1) end",
+     "if current > 0 and tier == 0 then return current end"),
+    ("the exit ratio is ignored",
+     "if current > 0 and ratio < TIER_EXIT then return 0 end", "if false then return 0 end"),
+    ("a small leader can run away",
+     "if leader_regions < (self:setting(\"runaway_min_regions\") or 10) then return 0 end",
+     "if false then return 0 end"),
+    ("the threat score is never released",
+     "cm:set_base_strategic_threat_score(previous, 0)", "local _ = previous"),
+    ("the score's carrier is not saved",
+     "\t\tst.scored_key = leader:name()\n\t\tlog(string.format(\"threat score %d on %s\"",
+     "\t\tst.scored_key = nil\n\t\tlog(string.format(\"threat score %d on %s\""),
+    ("a load does not re-apply the held score",
+     "self.runaway_reapply = true", "self.runaway_reapply = false"),
+    ("the tier-rise grudge fires every turn",
+     "if tier > st.last_event_tier and self:setting(\"runaway_threat\") and #names > 0 then",
+     "if tier > 0 and self:setting(\"runaway_threat\") and #names > 0 then"),
+    ("a tier rise with nobody to poll loses its grudge",
+     "self:setting(\"runaway_threat\") and #names > 0 then",
+     "self:setting(\"runaway_threat\") then"),
+    ("switching the threat off mid-campaign keeps the score",
+     "\n\t\t\tor (st.scored_key and not self:setting(\"runaway_threat\")) then", " then"),
+    ("a falling tier never forgets how high the grudge fired",
+     "if tier < st.tier then st.last_event_tier = tier end",
+     "if false then st.last_event_tier = tier end"),
+    ("the threat switch is ignored",
+     "if tier > 0 and leader and self:setting(\"runaway_threat\") then",
+     "if tier > 0 and leader then"),
+    ("strangers are paired in the poll",
+     "if cands[i].met[cands[j].name] then", "if true then"),
+    ("a faction at the alliance limit is still polled",
+     "\t\t\t\tand (st.alliances[f:name()] or 0) < MAX_FORCED_ALLIANCES then",
+     "\t\t\t\tand true then"),
+    ("the alliance limit is not checked while forming",
+     "if (st.alliances[a_key] or 0) < MAX_FORCED_ALLIANCES\n"
+     "\t\t\t\tand (st.alliances[b_key] or 0) < MAX_FORCED_ALLIANCES then",
+     "if true then"),
+    ("the poll forms on both-positive, not the sum",
+     "if oa and ob and sa and sb and sa + sb > 0 and self:afford(PRICE.force) then\n"
+     "\t\t\t\t\tself:beat_force(a_key, b_key)",
+     "if oa and ob and sa and sb and sa > 0 and sb > 0 and self:afford(PRICE.force) then\n"
+     "\t\t\t\t\tself:beat_force(a_key, b_key)"),
+    ("no limit on alliances a turn",
+     "if st.formed_count >= FORMS_PER_TURN then", "if false then"),
+    ("a player is polled",
+     "and not f:is_rebel() and not f:is_human()\n\t\t\t\tand f:name() ~= leader_key",
+     "and not f:is_rebel()\n\t\t\t\tand f:name() ~= leader_key"),
+    ("the alliance switch is ignored",
+     "if self:setting(\"runaway_alliances\") then self:poll_alliances(batch, st) end",
+     "self:poll_alliances(batch, st)"),
+    ("multiplayer reads MCT",
+     "if ok_mp and mp == true then return default end", "if false then return default end"),
+    ("MCT values are not type-checked",
+     "if type(got) == type(default) then v = got end", "if got ~= nil then v = got end"),
+    ("a dead faction can merge",
+     "if f:is_dead() then return f:name() .. \" is dead\" end", ""),
+    ("a rebel faction can merge",
+     "if f:is_rebel() then return f:name() .. \" is a rebel faction\" end", ""),
+    ("a player can merge",
+     "if f:is_human() then return f:name() .. \" is a player\" end", ""),
+    ("an invader can merge",
+     "if self:is_invader(f) then return f:name() .. \" is an endgame invader\" end", ""),
+    ("a vassal can merge",
+     "if f:is_vassal() then return f:name() .. \" is a vassal\" end", ""),
+    ("the master of a player's vassal can merge",
+     "if h:is_vassal_of(a) or h:is_vassal_of(t) then return \"a player is a vassal of one of them\" end",
+     ""),
+    ("an Iron Court rising can merge",
+     "if type(risings) == \"table\" and (risings[a_key] or risings[t_key]) then",
+     "if false then"),
+    ("a race the game forbids reaches the switch",
+     "if not (races and races[sc]) then return \"the game does not let this race confederate\" end",
+     ""),
+    ("the race switch is ignored",
+     "if not self:setting(\"race_\" .. sc) then return \"the race switch is off\" end", ""),
+    ("Chaos Dwarf houses merge under a Chaos Dwarf player",
+     "if h:subculture() == CHD_SC then return \"a player plays the Chaos Dwarfs\" end", ""),
+    ("factions at war merge",
+     "if a:at_war_with(t) then return \"they are at war\" end", ""),
+    ("the runaway absorbs",
+     "if r == a_key then return a_key .. \" is the runaway\" end", ""),
+    ("the runaway's master absorbs",
+     "if rf and not rf:is_null_interface() and (rf:is_vassal_of(a)",
+     "if rf and not rf:is_null_interface() and (false"),
+    ("the runaway's military ally absorbs",
+     "or a:military_allies_with(rf) or a:defensive_allies_with(rf)) then",
+     "or false or a:defensive_allies_with(rf)) then"),
+    ("the runaway's defensive ally absorbs",
+     "or a:military_allies_with(rf) or a:defensive_allies_with(rf)) then",
+     "or a:military_allies_with(rf) or false) then"),
+    ("the attacker takes its own victim in",
+     "if sit and a_key == sit.instigator then return a_key .. \" is the attacker\" end", ""),
+    ("kin need not have met the victim",
+     "\t\t\t\tif m:name() == victim_key then\n\t\t\t\t\tscored[#scored + 1]",
+     "\t\t\t\tif true then\n\t\t\t\t\tscored[#scored + 1]"),
+    ("the smallest kin is asked first",
+     "if x.n ~= y.n then return x.n > y.n end", "if x.n ~= y.n then return x.n < y.n end"),
+    ("no limit on kin probed",
+     "if probed >= MERGE_PROBES then break end", "if false then break end"),
+    ("one direction of the probe is enough (absorber)",
+     "if oa and ob and willing then", "if oa and willing then"),
+    ("one direction of the probe is enough (target)",
+     "if oa and ob and willing then", "if ob and willing then"),
+    ("merge_needs_willing is ignored",
+     "local willing = not self:setting(\"merge_needs_willing\")",
+     "local willing = true or not self:setting(\"merge_needs_willing\")"),
+    ("no limit on confederations a turn",
+     "elseif merge_count(turn) >= (self:setting(\"merges_per_turn\") or 1) then", "elseif false then"),
+    ("merges before merge_from_turn",
+     "if turn < (self:setting(\"merge_from_turn\") or 10) then", "if false then"),
+    ("a merge is tried on a budget that cannot pay",
+     "elseif self:budget() < price then", "elseif false then"),
+    ("the price is never charged",
+     "\t\t\t\tself:afford(price)\n\t\t\t\tcm:set_saved_value(\"derpy_director_merge_turn\", turn)",
+     "\t\t\t\tcm:set_saved_value(\"derpy_director_merge_turn\", turn)"),
+    ("the price is charged before a partner is found",
+     "\tlocal probed = 0\n", "\tlocal probed = 0\n\tself:afford(price)\n"),
+    ("the turn's slot is taken before a partner is found",
+     "\tlocal probed = 0\n",
+     "\tlocal probed = 0\n\tcm:set_saved_value(\"derpy_director_merge_turn\", turn)\n"
+     "\tcm:set_saved_value(\"derpy_director_merge_count\", merge_count(turn) + 1)\n"),
+    ("the merge count runs on from turn to turn",
+     "local n = merge_count(turn) + 1\n\t\t\t\tself:afford(price)\n"
+     "\t\t\t\tcm:set_saved_value(\"derpy_director_merge_turn\", turn)\n"
+     "\t\t\t\tcm:set_saved_value(\"derpy_director_merge_count\", n)",
+     "self:afford(price)\n"
+     "\t\t\t\tcm:set_saved_value(\"derpy_director_merge_turn\", turn)\n"
+     "\t\t\t\tcm:set_saved_value(\"derpy_director_merge_count\", merge_count(turn) + 1)"),
+    ("the trigger switches are ignored",
+     "if not self:setting(mode == \"last_stand\" and \"merge_last_stand\" or \"merge_runaway\") then",
+     "if false then"),
+    ("the own-merge flag survives a failed merge",
+     "\tself.merging = nil\n\tif not ok then", "\tif not ok then"),
+    ("every confederation is dropped as our own",
+     "if self.merging == absorber:name() .. \"|\" .. absorbed:name() then", "if true then"),
+    ("the last stand never runs",
+     "\tif self:last_stand(sit) then sit.merged = true end\n", "\n"),
+    ("the last stand waits for the feud guard",
+     "\tif self:last_stand(sit) then sit.merged = true end\n\n"
+     "\t-- Before anything is priced. Every town is still logged; the feud is answered once.\n"
+     "\tif not self:first_of_feud_this_turn(sit) then\n"
+     "\t\tlog(\"already answered this feud this turn, nothing further\")\n"
+     "\t\treturn\n"
+     "\tend\n",
+     "\n"
+     "\t-- Before anything is priced. Every town is still logged; the feud is answered once.\n"
+     "\tif not self:first_of_feud_this_turn(sit) then\n"
+     "\t\tlog(\"already answered this feud this turn, nothing further\")\n"
+     "\t\treturn\n"
+     "\tend\n"
+     "\tif self:last_stand(sit) then sit.merged = true end\n"),
+    ("the last stand fires one region early",
+     "if v:region_list():num_items() > (self:setting(\"last_stand_regions\") or 1) then return false end",
+     "if v:region_list():num_items() >= (self:setting(\"last_stand_regions\") or 1) then return false end"),
+    ("the last stand retries a victim in the same turn",
+     "if seen[sit.victim] then return false end", "if false then return false end"),
+    ("a runaway merge answers any kind",
+     "local RUNAWAY_KINDS = {sack = true, raze = true, conquest = true}",
+     "local RUNAWAY_KINDS = {sack = true, raze = true, conquest = true, opportunism = true, "
+     "confederation = true, treachery = true, secession = true}"),
+    ("the runaway merge ignores who attacked",
+     "if not self:is_runaway(sit.instigator) then return false end", ""),
+    ("the runaway merge never runs",
+     "\tif self:runaway_merge(sit) then sit.merged = true end\n", "\n"),
+    ("the smaller side absorbs",
+     "if nv > nk or (nv == nk and victim < k) then absorber, target = victim, k end",
+     "if nv < nk or (nv == nk and victim < k) then absorber, target = victim, k end"),
+    ("the runaway tier setting is ignored",
+     "self:runaway_keys(self:setting(\"runaway_merge_tier\") or 1)", "self:runaway_keys(1)"),
+    ("the bloc rule follows the merge trigger setting",
+     "local runaways = self:runaway_keys(1)",
+     "local runaways = self:runaway_keys(self:setting(\"runaway_merge_tier\") or 1)"),
+    ("the runaway step and the opportunity roll share one guard",
+     "\t\t\tguarded(\"runaway step\", function() derpy_director:runaway_turn() end)\n"
+     "\t\t\tguarded(\"opportunity\", function() derpy_director:opportunity() end)",
+     "\t\t\tguarded(\"runaway step\", function() derpy_director:runaway_turn() "
+     "derpy_director:opportunity() end)"),
+    ("too early is said for every last stand",
+     "\t\tif self.too_early_turn == turn then return false end\n", ""),
+    ("the poll's candidates are left in the engine's order",
+     "\ttable.sort(cands, function(x, y) return x.name < y.name end)\n", ""),
+    ("a crisis bundle key is misspelt (grudge too far)",
+     "endgame_grudge_too_far\"", "endgame_grudge_to_far\""),
+    ("a crisis bundle key is misspelt (vampires rise)",
+     "endgame_vampires_rise\"", "endgame_vampire_rise\""),
+    ("a crisis bundle key is misspelt (Hashut)",
+     "endgame_faction_chaos_dwarfs_hashut\"", "endgame_faction_chaos_dwarf_hashut\""),
+    ("invaders are never runaways",
+     "if not f:is_null_interface() and not f:is_dead() and self:is_invader(f) then",
+     "if false then"),
+    ("the invader keys are ignored",
+     "\t\tif key == k then return true end", "\t\tif false then return true end"),
+    ("Nagash is an invader without his episode",
+     "if ok and on == true then return true end", "if true then return true end"),
+    ("the crisis bundles are ignored",
+     "if f:has_effect_bundle(b) then return true end", "if false then return true end"),
+    ("a rising is not recorded",
+     "\trisings[rebels] = true\n", "\n"),
+    ("human is castable",
+     "\t\t\t\tand not f:is_human()\n\t\t\t\tand f:name() ~= sit.instigator",
+     "\t\t\t\tand true\n\t\t\t\tand f:name() ~= sit.instigator"),
+    ("dead factions are castable",
+     "not f:is_dead() and not f:is_rebel()\n\t\t\t\tand not f:is_human()",
+     "true and not f:is_rebel()\n\t\t\t\tand not f:is_human()"),
+    ("the instigator casts itself",
+     "and f:name() ~= sit.instigator", "and true"),
+    ("cooldown is ignored",
+     "and not self:on_cooldown(f:name())", "and true"),
+    ("neutral cultures are cast",
+     "if base < 0 then", "if base <= 0 then"),
+    ("the budget never refuses",
+     "if b < price then", "if false then"),
+    ("the past event re-fires every turn",
+     'elseif type(seen) == "number" and sit.turn < seen + GRUDGE_MEMORY then', "elseif false then"),
+    # The gate was `sa > 0 and sb > 0` until 2026-09-18. Over 151 live evaluations the best
+    # min(sa, sb) ever seen was -1.12, so it had never once opened and force, tell, warchest and
+    # shield were all unreachable in play. This mutant is that gate coming back.
+    ("the pact needs both halves positive, not a positive sum",
+     "\n\t\t\tif oa and ob and sa and sb and sa + sb > 0 and",
+     "\n\t\t\tif oa and ob and sa and sb and sa > 0 and sb > 0 and"),
+    ("any pair at all is forced into a pact",
+     "\n\t\t\tif oa and ob and sa and sb and sa + sb > 0 and", "\n\t\t\tif true and"),
+    # The generic pair must sit on the BASE of its range. Put it back on 7301 and it collides
+    # with the first per-culture grudge - which is what shipped for a day, drew the wrong card,
+    # and produced no bad_mods_report entry to say so.
+    ("the generic pact row collides with a culture grudge row",
+     "pact = {index = 7400, key = \"pact\"},",
+     "pact = {index = 7302, key = \"pact\"},"),
+    ("the news buffer is unbounded",
+     "while #buf > NEWS_CAP do", "while false do"),
+    ("the cast sort has no tiebreak",
+     "if x.score ~= y.score then return x.score > y.score end\n\t\treturn x.name < y.name",
+     "if x.score ~= y.score then return x.score > y.score end\n\t\treturn false"),
+    ("distance is ignored",
+     "if reach[r:name()] then reachable = true break end", "reachable = true"),
+    ("the safety term is inert",
+     "* self:safety(f)", "* 1.0"),
+    ("reach is unbounded",
+     "local MAX_HOPS = 3", "local MAX_HOPS = 99"),
+    # The event exposes character() and garrison_residence() and it is easy to read the wrong
+    # one - the live game already caught an invented context:instigator() here.
+    ("instigator and victim are swapped",
+     "local instigator = char:faction()", "local instigator = garrison:faction()"),
+    # The budget only ever refilled on campaign load until 2026-09-17, so it was a one-way
+    # drain and 61 of 69 live beats were starved. Both shapes of that bug:
+    ("the budget never refills",
+     "local b = self:budget() + self:refill_amount(turn)",
+     "local b = self:budget()"),
+    ("the refill is faction-scoped, so it never raises",
+     '"WorldStartRound"', '"FactionTurnStart"'),
+    ("a situation nobody witnessed still spends",
+     "if #cast == 0 then", "if false then"),
+    ("the once-only guard keys on the settlement, not the feud",
+     'local seen_key = "derpy_director_seen_" .. sit.instigator .. "_" .. sit.victim',
+     'local seen_key = "derpy_director_seen_" .. sit.instigator .. "_" .. tostring(sit.region)'),
+    # The feed. Every one of these draws NOTHING in game rather than erroring, so the harness is
+    # the only thing between them and a silent dead message.
+    # The per-turn rationing. The feed quota these replaced was removed on 2026-09-18: with one
+    # grudge a turn there was never a second message for it to withhold, and its three mutants
+    # had become uncatchable, which is how the dead code announced itself.
+    ("the world takes a grudge for every feud, every turn",
+     "if n >= GRUDGES_PER_TURN then", "if false then"),
+    ("the grudge quota is per campaign, not per turn",
+     'if spent == turn then n = cm:get_saved_value("derpy_director_grudge_count") or 0 end',
+     'n = cm:get_saved_value("derpy_director_grudge_count") or 0'),
+    ("the grudge lands on the weakest responder, not the strongest",
+     "self:beat_past_event(sit.instigator, cast[1])",
+     "self:beat_past_event(sit.instigator, cast[#cast])"),
+    # A feud turned away by the quota must not be marked answered. Setting seen_key outside the
+    # branch that fired made a transient shortage permanent: the feud never got a grudge at all.
+    ("a feud the quota turned away is burnt forever",
+     "if self:grudge_slot(sit.turn) and self:afford(PRICE.past_event) then",
+     'cm:set_saved_value(seen_key, true)' + NL + TAB + TAB
+     + "if self:grudge_slot(sit.turn) and self:afford(PRICE.past_event) then"),
+    # One event per REGION, not per war. A province falling billed 13 times in a turn live.
+    ("one feud is answered once per region, not once per turn",
+     "if set[feud] then return false end", "if false then return false end"),
+    ("the feud guard is per campaign, not per turn",
+     'if when ~= sit.turn or type(set) ~= "table" then set = {} end',
+     'if type(set) ~= "table" then set = {} end'),
+    # Both call sites, in one mutant: the anchor is the located call's argument tail, which is
+    # the one the fixtures exercise. `false, rec.index)` alone matches the fallback call too.
+    ("a transient record is sent the persistent flag",
+     "rec.tail, sit.x, sit.y,", "rec.tail, sit.x, sit.y, true, rec.index) --"),
+    # A located record MUST be given a point. Passing nil coordinates fails is_number() inside
+    # CA's wrapper, which script_errors and draws nothing.
+    ("a region with no settlement is told anyway, with no point",
+     'if not (sit.x and sit.y) then\n\t\tlog(\"feed \"',
+     'if false then\n\t\tlog(\"feed \"'),
+    # Outrage (A) and the stance beat (B).
+    ("kinslaying is judged like any other attack",
+     "if a_sc == b_sc then return OUTRAGE_KIN", "if false then return OUTRAGE_KIN"),
+    ("sworn enemies are judged as harshly as an unprovoked attack",
+     "if base <= OUTRAGE_STEPS[i][1] then", "if false then"),
+    ("the outrage floor never suppresses a grudge",
+     "if outrage < OUTRAGE_FLOOR then", "if false then"),
+    ("outrage does not size the audience",
+     "local take = math.floor(CAST_TAKE * outrage + 0.5)", "local take = CAST_TAKE"),
+    ("the stance is pushed at the responder, not the aggressor",
+     "self:beat_stance(cast[i], sit.instigator, STANCE_HOSTILE)",
+     "self:beat_stance(sit.instigator, cast[i], STANCE_HOSTILE)"),
+    ("live attitude is ignored",
+     "live = 1.0 + bump", "live = 1.0"),
+    # Scenarios (C).
+    ("a peaceful hand-over is treated as a conquest",
+     "if ok and type(reason) == \"string\" and not CONQUEST_REASONS[reason] then",
+     "if false then"),
+    ("an unopposed capture is not a conquest",
+     "[\"unopposed capture\"] = true,", ""),
+    # Patch 9.0.
+    ("the plague uses the 8.x two-argument call",
+     "cm:spawn_plague_at_region(spreader, region, key)",
+     "cm:spawn_plague_at_region(region, key)"),
+    ("a Director error escapes into the engine's listener loop",
+     "local ok, err = pcall(fn)", "local ok, err = true, fn()"),
+    ("conquest reads the winner and loser the same way round",
+     "local winner = region:owning_faction()", "local winner = context:previous_faction()"),
+    # Protection (E) and consequences (F).
+    ("a settlement the aggressor now owns is shielded anyway",
+     "if owner:name() ~= sit.victim then", "if false then"),
+    ("the shield is never lifted",
+     "if now >= held[k] then", "if false then"),
+    ("the shield is lifted the moment it is applied",
+     "held[key] = cm:model():turn_number() + SHIELD_TURNS",
+     "held[key] = cm:model():turn_number()"),
+    ("the region key is passed where a settlement key is wanted",
+     "local key = settlement:key()", "local key = sit.region"),
+    ("only one member of a new coalition is funded",
+     "self:beat_warchest(pb, gold)", "local _unused = pb"),
+    ("every sack breeds plague, not only a razing",
+     'if sit.kind == "raze" and self:afford(PRICE.plague) then',
+     "if self:afford(PRICE.plague) then"),
+    # The floor guard around the consequences block. The grudge guard tests `<` on the same
+    # constant, so the operator alone tells them apart - no multiline anchor needed.
+    ("consequences ignore the outrage floor",
+     "if outrage >= OUTRAGE_FLOOR then", "if true then"),
+    ("the feed index drifts from the row that ships",
+     "grudge = {index = 7300,", "grudge = {index = 1,"),
+    # The per-culture records. A wrong voice draws the wrong culture's name and artwork; losing
+    # the lookup silently demotes every message back to the generic pair.
+    ("the message always speaks in the generic voice",
+     "local index = map and map[kind] and subculture and map[kind][subculture]",
+     "local index = nil"),
+    ("the voice is the LAST responder, not the lead",
+     "local f = cm:get_faction(cast[1])", "local f = cm:get_faction(cast[#cast])"),
+    ("a filtered hand-over is also logged as an incomplete context",
+     ', not by force")\n\t\treturn false', ', not by force")\n\t\treturn nil'),
+    # Companion mods (2026-11-13): Resource Overhaul's seizures and the Great Guilds' temple.
+    ("a seizure counts at a sack's full outrage",
+     "outrage = outrage * (OUTRAGE_WEIGHT[sit.kind] or 1)", "outrage = outrage"),
+    ("a shipment already gone still raises a situation",
+     "if ok and live then self:on_seizure(s.f", "if true then self:on_seizure(s.f"),
+    ("a convoy already gone still raises a situation",
+     "if ok and live then self:on_seizure(c.f", "if true then self:on_seizure(c.f"),
+    ("the wrapper swallows Resource Overhaul's results",
+     'log("companion hook errored: " .. tostring(err)) end\n\treturn ...',
+     'log("companion hook errored: " .. tostring(err)) end\n\treturn'),
+    ("a Director fault escapes into Resource Overhaul's turn",
+     "local ok, err = pcall(notify)", "local ok, err = true, notify()"),
+    ("a seized convoy tells the sacked-settlement grudge",
+     'sit.kind == "seizure" and "raid" or "grudge"', '"grudge"'),
+    ("every culture's temple condemns kin-slaying",
+     "or not KIN_CONDEMNED[f:subculture()] then", "then"),
+    ("a confederation costs temple Reputation",
+     'why ~= "kinslaying" or not KIN_DEEDS[sit.kind] then', 'why ~= "kinslaying" then'),
+    ("the temple message goes to whoever is watching",
+     'if cm:get_local_faction_name(true) == sit.instigator then self:beat_tell(sit, "guild", {}) end',
+     'self:beat_tell(sit, "guild", {})'),
+    ("a witness is told of strangers' quarrels",
+     "if player ~= sit.instigator and player ~= sit.victim then return false end", ""),
+    ("only the victim is told, never the aggressor",
+     "if player ~= sit.instigator and player ~= sit.victim then return false end",
+     "if player ~= sit.victim then return false end"),
+    ("a temple loss of nothing is still announced",
+     "if type(lost) ~= \"number\" or lost <= 0 then return court end", ""),
+    # The Iron Court (2026-11-14): secessions, the court hearing of the neighbours, kin-slaying.
+    ("the court of an AI realm is moved",
+     "if not ic or not ic.is_human(faction_key) then return false end",
+     "if not ic then return false end"),
+    ("a court move is never saved",
+     "if moved then ic.save(faction_key) end", ""),
+    ("the court is moved before it is read from the save",
+     "\tic.loaded(faction_key)\n", ""),
+    ("the merchants gain as well",
+     '{"ledger", -COURT_THREAT_LOSS}', '{"ledger", COURT_THREAT_LOSS}'),
+    ("a cold shoulder is news at court",
+     "\tif landed then\n", "\tif true then\n"),
+    ("a secession tells the pact record",
+     'if not one_tell then self:beat_tell(sit, "pact", cast) end',
+     'self:beat_tell(sit, "pact", cast)'),
+    ("a secession tells the sacked-settlement grudge",
+     '\t\t\tif not one_tell then\n\t\t\t\tself:beat_tell(sit, sit.kind == "seizure" and "raid" '
+     'or "grudge", cast)\n\t\t\tend\n',
+     '\t\t\tself:beat_tell(sit, sit.kind == "seizure" and "raid" or "grudge", cast)\n'),
+    ("a secession is never told",
+     "if one_tell then self:beat_tell(sit, one_tell, cast) end", ""),
+    ("the second party to leave in a turn wipes out the first's provinces",
+     "taken[faction_key] = taken[faction_key] or {}", "taken[faction_key] = {}"),
+    ("the rebels are sited on any land they hold",
+     "if provinces[r:province_name()] and (not site", "if (not site"),
+    ("the wrapper swallows IC.secede's result",
+     "return secede(faction_key, slug)", "secede(faction_key, slug)"),
+    ("a moved Iron Court call is hooked anyway",
+     '"secede", "rebel_sour_all", "defecting_provinces", "move_loyalty",',
+     '"secede", "rebel_sour_all", "defecting_provinces",'),
+    ("kin-slaying costs the court nothing",
+     'local court = self:court_moves(sit.instigator, {{"temple", -COURT_KIN_LOSS}}, "kinslaying")',
+     "local court = false"),
+    # The storyteller (2026-11-14): the seed, pacing, the chance, the draw, adaptation,
+    # opportunism and treachery.
+    ("the seed is re-rolled on every load",
+     "\tif s then return s end\n", ""),
+    ("the temperament is never named to the player",
+     "\tself:announce(name)\n", ""),
+    ("a hatred one way only makes a hot grudge",
+     "self:hatred(a, b) <= HOT_FLOOR and self:hatred(b, a) <= HOT_FLOOR",
+     "self:hatred(a, b) <= HOT_FLOOR"),
+    ("the landless can be ambitious",
+     "\t\t\t\tand f:region_list():num_items() >= 1 then\n", "\t\t\t\tthen\n"),
+    ("the player can be ambitious",
+     "not f:is_rebel() and not f:is_human()\n\t\t\t\tand f:region_list():num_items() >= 1",
+     "not f:is_rebel()\n\t\t\t\tand f:region_list():num_items() >= 1"),
+    ("the hot grudge changes nothing",
+     "if self:is_hot(f:subculture(), inst_sc) then score = score * HOT_MULT end", ""),
+    ("the hot grudge only counts one way round",
+     " or (h[1] == sc_b and h[2] == sc_a)", ""),
+    ("ambitious factions are not favoured",
+     "if self:is_ambitious(f:name()) then score = score * AMBITIOUS_MULT end", ""),
+    ("ambitious factions sit out the whole cooldown",
+     "if self:is_ambitious(key) then turns = math.floor(turns / 2) end", ""),
+    ("every temperament waits twelve turns",
+     "local turns = self:temperament().cooldown", "local turns = 12"),
+    ("the calm never comes",
+     "return ((turn - 1 + (s and s.phase or 0)) % t.cycle) < t.on", "return true"),
+    ("the rolled phase is ignored",
+     "(s and s.phase or 0)", "0"),
+    ("the calm answers as readily as the storm",
+     "return self:temperament().tension_off", "return 1.0"),
+    ("a wild world refills by a fixed amount",
+     "if t.refill_min then return cm:random_number(t.refill_max, t.refill_min) end",
+     "if t.refill_min then return 60 end"),
+    ("a reload pays out a refill",
+     'budget " .. tostring(self:budget()))', 'budget " .. tostring(self:refill()))'),
+    ("the player counts for no more than a stranger",
+     "if inst or vic then p = p * PARTY_WEIGHT end", ""),
+    ("an empty budget answers as readily as a full one",
+     "p = p * (BUDGET_FLOOR + (1 - BUDGET_FLOOR) * fill) * self:tension(sit.turn)",
+     "p = p * self:tension(sit.turn)"),
+    ("every situation is answered",
+     '\tif roll > pct then\n\t\tlog(string.format("passed over',
+     '\tif false then\n\t\tlog(string.format("passed over'),
+    ("an empty budget still rolls, and answers with nothing",
+     "if b < PRICE.mood then", "if false then"),
+    ("a budget of exactly one stance push is treated as empty",
+     "if b < PRICE.mood then", "if b <= PRICE.mood then"),
+    ("turn 1 answers as readily as any other",
+     "if sit.turn == 1 and not (inst or vic) then p = p * FIRST_TURN_DAMP end", ""),
+    ("the player's own first turn is damped too",
+     "if sit.turn == 1 and not (inst or vic) then", "if sit.turn == 1 then"),
+    ("each town of a feud is a fresh roll",
+     "\t-- Before anything is priced. Every town is still logged; the feud is answered once.\n",
+     "\tif not self:chosen(sit) then return end\n"
+     "\t-- Before anything is priced. Every town is still logged; the feud is answered once.\n"),
+    ("the draw always takes the strongest",
+     "local roll, run, pick = cm:random_number(total, 1), 0, #scored",
+     "local roll, run, pick = 1, 0, #scored"),
+    ("the draw weighs every candidate the same",
+     "scored[j].weight = math.max(1, math.floor(scored[j].score * 10))", "scored[j].weight = 1"),
+    ("a wild world's cast never swings",
+     "take = math.max(1, math.min(CAST_TAKE, take + cm:random_number(3, 1) - 2))", "take = take"),
+    ("a wild world's war chest never swings",
+     "if t.swing then gold = math.floor(gold * cm:random_number(150, 50) / 100) end", ""),
+    # The long run (2026-11-14): sizes follow the aggressor, rising ramps, a feud's grudge fades,
+    # and pact partners that might accept.
+    ("the answer's size ignores the aggressor",
+     "local s = 1 + math.max(0, f:region_list():num_items() - SIZE_FROM) / SIZE_STEP", "local s = 1"),
+    ("size counts from the first region, not the twentieth",
+     "f:region_list():num_items() - SIZE_FROM", "f:region_list():num_items()"),
+    ("a giant gets answers without limit",
+     "if s > SIZE_MAX then s = SIZE_MAX end", ""),
+    ("rebels ignore the aggressor's size",
+     "math.floor(REBEL_UNITS * self:size_scale(sit.instigator) + 0.5)", "REBEL_UNITS"),
+    ("the war chest ignores the aggressor's size",
+     "local gold = math.floor(WARCHEST * self:size_scale(sit.instigator))", "local gold = WARCHEST"),
+    ("rising never rises",
+     "if not self:temperament().ramp then return 1 end\n\tlocal r",
+     "do return 1 end\n\tlocal r"),
+    ("every temperament ramps",
+     "if not self:temperament().ramp then return 1 end\n\tlocal r", "local r"),
+    ("the ramp never levels off",
+     "if r > RAMP_MAX then r = RAMP_MAX end", ""),
+    ("the ceiling does not grow with the ramp",
+     "return math.floor(BUDGET_START * self:ramp(turn))", "return BUDGET_START"),
+    ("the refill does not ramp",
+     "return math.floor((self:is_on(turn) and t.refill_on or t.refill_off) * self:ramp(turn))",
+     "return self:is_on(turn) and t.refill_on or t.refill_off"),
+    ("the chance reads the starting ceiling",
+     "local fill = self:budget() / self:budget_cap(sit.turn)", "local fill = self:budget() / BUDGET_START"),
+    ("a feud's grudge fades a turn early",
+     "sit.turn < seen + GRUDGE_MEMORY then", "sit.turn < seen + GRUDGE_MEMORY - 1 then"),
+    ("the mark stores that a grudge fired, not when",
+     "cm:set_saved_value(seen_key, sit.turn)", "cm:set_saved_value(seen_key, true)"),
+    ("an old save's mark is not read",
+     "if seen == true then seen = 1 end", ""),
+    ("responders who hate each other are asked",
+     "if self:hatred(sa, sb) <= HOT_FLOOR or self:hatred(sb, sa) <= HOT_FLOOR then return true end", ""),
+    ("only one direction of hatred is read",
+     " or self:hatred(sb, sa) <= HOT_FLOOR then return true end", " then return true end"),
+    ("a pair at war is asked",
+     "return a:at_war_with(b)", "return false"),
+    ("the victim is never a partner",
+     "out_list[#out_list + 1] = sit.victim", ""),
+    ("a player victim is forced into a pact",
+     "and not v:is_human() then", "then"),
+    ("losing ground does not ease the world",
+     "n = n + (d < 0 and d * ADAPT_LOSS or d * ADAPT_GAIN)", "n = n + d * ADAPT_GAIN"),
+    ("adaptation never forgets",
+     "if n > 0 then n = math.max(0, n - ADAPT_FORGET) else n = math.min(0, n + ADAPT_FORGET) end",
+     ""),
+    ("adaptation is ignored for the aggressor",
+     "if inst then p = p * self:adapt_factor(sit.instigator) end", ""),
+    ("a struggling victim is helped no sooner",
+     "if vic then p = p * (2 - self:adapt_factor(sit.victim)) end", ""),
+    ("the opportunity always fires",
+     '\tif roll > pct then\n\t\tlog(string.format("no opportunity',
+     '\tif false then\n\t\tlog(string.format("no opportunity'),
+    ("the player is a target of opportunism",
+     "and not f:is_dead() and not f:is_human()\n\t\t\t\tand not f:is_rebel()",
+     "and not f:is_dead()\n\t\t\t\tand not f:is_rebel()"),
+    ("last round's losses carry into the next",
+     '\tcm:set_saved_value("derpy_director_losses", {})\n', ""),
+    ("the weak are not drawn by what they lost",
+     "local pick, run, draw = keys[#keys], 0, cm:random_number(total, 1)",
+     "local pick, run, draw = keys[#keys], 0, 1"),
+    ("the victor is the first taker by name, not the one who took most",
+     "if losses[pick].by[takers[i]] > losses[pick].by[victor] then victor = takers[i] end", ""),
+    ("a conquest's towns do not count toward opportunism",
+     'if sit.kind == "conquest" then self:note_loss(sit) end', ""),
+    ("opportunism is told with the sack records",
+     ' opportunism = "blood",', ""),
+    ("treachery is told with the sack records",
+     ', treachery = "betrayal"}', "}"),
+    ("a plain declaration of war is a betrayal",
+     "\tif not broken then return false end\n", ""),
+    ("ending trade is a betrayal",
+     '"was_non_aggression_pact"}', '"was_non_aggression_pact", "was_trade_agreement"}'),
+    ("a confederation's dissolved treaties are betrayals",
+     "\tif context:result_of_confederation() then return false end\n", ""),
+    ("betraying an ally can be a shrug",
+     'if sit.kind == "treachery" and outrage < OUTRAGE_UNPROVOKED then',
+     "if false then"),
+    ("the court's temple hears of kin-slaying only with the Guilds installed",
+     'if why ~= "kinslaying" or not KIN_DEEDS[sit.kind] then return false end',
+     'if not self.guilds or why ~= "kinslaying" or not KIN_DEEDS[sit.kind] then return false end'),
+    ("the temple never hears of it",
+     "\t-- Before the cast: the slayer's own temple hears of it whether or not any neighbour cares.\n"
+     "\tself:beat_temple(sit, why)\n",
+     ""),
+    ("the temple is asked once per town, not once per feud",
+     "\tif not self:first_of_feud_this_turn(sit) then\n"
+     "\t\tlog(\"already answered this feud this turn, nothing further\")\n"
+     "\t\treturn\n"
+     "\tend\n"
+     "\n"
+     "\t-- Before the cast: the slayer's own temple hears of it whether or not any neighbour cares.\n"
+     "\tself:beat_temple(sit, why)\n",
+     "\tself:beat_temple(sit, why)\n"
+     "\tif not self:first_of_feud_this_turn(sit) then\n"
+     "\t\tlog(\"already answered this feud this turn, nothing further\")\n"
+     "\t\treturn\n"
+     "\tend\n"),
+]
+
+
+def _selftest_passes():
+    r = subprocess.run([sys.executable, BUILD, "--selftest"], capture_output=True, text=True)
+    return r.returncode == 0
+
+
+def run(mutants=None):
+    mutants = mutants or MUTANTS
+    original = open(SCRIPT, encoding="utf-8", newline="").read()
+    assert _selftest_passes(), "the selftest is RED before mutating - fix that first"
+    survivors, stale = [], []
+    try:
+        for name, find, replace in mutants:
+            if original.count(find) != 1:
+                stale.append("%s (anchor %r appears %d times, expected 1)"
+                             % (name, find, original.count(find)))
+                continue
+            open(SCRIPT, "w", encoding="utf-8", newline="").write(
+                original.replace(find, replace, 1))
+            if _selftest_passes():
+                survivors.append(name)
+    finally:
+        open(SCRIPT, "w", encoding="utf-8", newline="").write(original)
+    assert open(SCRIPT, encoding="utf-8", newline="").read() == original, \
+        "the shipped file was NOT restored byte for byte"
+    assert _selftest_passes(), "the selftest is RED after restoring - the file is damaged"
+    for s in stale:
+        print("STALE ANCHOR: %s" % s)
+    for s in survivors:
+        print("SURVIVED (no assertion catches this): %s" % s)
+    print("%d mutants, %d survived, %d stale anchors"
+          % (len(mutants), len(survivors), len(stale)))
+    return survivors, stale
+
+
+def _selftest():
+    # A mutant that changes nothing must SURVIVE, and a bad anchor must be reported STALE.
+    # If the runner cannot report either, a clean report from it means nothing.
+    survivors, stale = run([
+        ("no-op control", "local ENABLED = true", "local ENABLED = true "),
+        ("deliberately bad anchor", "this string is not in the file", "x"),
+    ])
+    assert survivors == ["no-op control"], survivors
+    assert len(stale) == 1 and "deliberately bad anchor" in stale[0], stale
+    print("selftest ok - the runner reports survivors and stale anchors, and restores the file")
+
+
+if __name__ == "__main__":
+    if "--selftest" in sys.argv:
+        _selftest()
+    else:
+        survivors, stale = run()
+        sys.exit(1 if (survivors or stale) else 0)
