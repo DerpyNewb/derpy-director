@@ -26,6 +26,8 @@ IN_PACK_LORE = "script/campaign/mod/derpy_director_lore.lua"
 MCT_PAGE = os.path.join(ROOT, "Modding Files", "pack", "script", "mct", "settings",
                         "derpy_director.lua")
 IN_PACK_MCT = "script/mct/settings/derpy_director.lua"
+IN_PACK_CHRONICLE = "script/campaign/mod/derpy_director_chronicle.lua"
+BACKUP_DIR = os.path.join(ROOT, "Modding Files", "Backup")
 
 # ---------------------------------------------------------------- the event feed
 #
@@ -663,7 +665,16 @@ function cm:add_first_tick_callback(fn) FIRST_TICKS[#FIRST_TICKS + 1] = fn end
 -- rise and one preloaded high could never be spent, so every assertion resting on either passed
 -- without exercising the budget at all.
 for k, v in pairs(PRELOAD) do SAVED[k] = v end
-function cm:set_saved_value(name, value) SAVED[name] = value end
+-- As CA's (lib_campaign_manager.lua:1840): a nil value is a script error and the old value STAYS.
+-- This stub stored nil until 2026-11-15, so a test of clearing a key passed here and failed in game.
+function cm:set_saved_value(name, value)
+  if value == nil then
+    record("script_error_set_saved_value_nil", name)
+    return false
+  end
+  SAVED[name] = value
+end
+function cm:clear_saved_value(name) SAVED[name] = nil end
 function cm:get_saved_value(name) return SAVED[name] end
 -- Clamped into [min, max] as the real one is. SEED_ROLL is one number for every call, or a list
 -- consumed in order and then repeating its last entry, so a test can script a run of dice.
@@ -909,7 +920,7 @@ for _, ev in ipairs(EVENTS) do
       ctx = {
         proposer = function() return BY_NAME[ev.instigator] end,
         recipient = function() return BY_NAME[ev.victim] end,
-        is_war = function() return true end,
+        is_war = function() return ev.war ~= false end,
         was_alliance = flag("was_alliance"),
         was_military_alliance = flag("was_military_alliance"),
         was_defensive_alliance = flag("was_defensive_alliance"),
@@ -978,7 +989,8 @@ fh:close()
 TEST_SEED = {"temperament": "rising", "phase": 0, "hot": [], "ambitious": []}
 
 STATE_KEYS = ["derpy_director_seed", "derpy_director_budget", "derpy_director_cooldowns",
-              "derpy_director_news", "derpy_director_last_tier", "derpy_director_merge_count"]
+              "derpy_director_news", "derpy_director_last_tier", "derpy_director_merge_count",
+              "derpy_director_chronicle"]
 
 
 def _lua(v):
@@ -1043,11 +1055,11 @@ def _events_table(events):
         # harness that advances a turn per event can never reproduce that contention.
         rows.append(
             "{event = %s, instigator = %s, victim = %s, region = %s, turn = %s, reason = %s, "
-            "stale = %s, treaty = %s, n = %s, code = %s, met = %s}"
+            "stale = %s, treaty = %s, n = %s, code = %s, met = %s, war = %s}"
             % (_lua(e["event"]), _lua(e.get("instigator")), _lua(e.get("victim")),
                _lua(e.get("region")), _lua(e.get("turn")), _lua(e.get("reason")),
                _lua(e.get("stale", False)), _lua(e.get("treaty")), _lua(e.get("n")),
-               _lua(e.get("code")), _lua(e.get("met"))))
+               _lua(e.get("code")), _lua(e.get("met")), _lua(e.get("war"))))
     return "{" + ", ".join(rows) + "}"
 
 
@@ -1320,6 +1332,10 @@ def feed_rows():
         for part in ("title", "primary", "secondary"):
             strings.append({"key": "%s_%s_%s" % (FRAG, r["key"], part)})
             loc.append({"key": _loc_key(r["key"], part), "text": r[part], "tooltip": "false"})
+    # The Chronicle's panel text, in the same loc file. gen_director_ui owns the rows.
+    import gen_director_ui as UI
+    for k, v in UI.CHRONICLE_LOC.items():
+        loc.append({"key": UI.LOC_PREFIX + k, "text": v, "tooltip": "false"})
     return {
         "campaign_groups": groups,
         "campaign_group_members": members,
@@ -1418,7 +1434,9 @@ def check_feed():
         for suffix in [""] + ["_" + sc for sc in cultures]:
             for part in ("title", "primary", "secondary"):
                 buildable.add("%s%s%s_%s" % (stem, kind, suffix, part))
-    shipped = {row["key"] for row in loc}
+    # The Chronicle's rows are the panel script's, checked by gen_director_ui.check_loc.
+    import gen_director_ui as UI
+    shipped = {row["key"] for row in loc if not row["key"].startswith(UI.LOC_PREFIX)}
     assert shipped == buildable, (
         "the shipped loc keys and the keys the Lua can build disagree: %d only shipped, "
         "%d only buildable" % (len(shipped - buildable), len(buildable - shipped)))
@@ -2043,14 +2061,14 @@ def _selftest():
     # much later by a panel; a loc call from a listener CTDs at turn 1 and pcall does not catch
     # it, so no resolved text may ever enter this buffer.
     _, state2 = run_lua(pair_world, events=ev2, regions_spec=regions, scores=yes)
-    assert state2["derpy_director_news"] == "table:1", state2
+    assert state2["derpy_director_chronicle"] == "table:1", state2
 
-    # 15b. The ring buffer is CAPPED. Every entry rides in the save for the life of the
+    # 15b. The chronicle is CAPPED. Every entry rides in the save for the life of the
     # campaign, so an unbounded buffer is a save that grows without limit.
     many = [{"event": "CharacterSackedSettlement", "instigator": "sacker",
-             "victim": "victim", "region": "r_victim"} for _ in range(60)]
+             "victim": "victim", "region": "r_victim"} for _ in range(120)]
     _, state3 = run_lua(pair_world, events=many, regions_spec=regions, scores=yes)
-    assert state3["derpy_director_news"] == "table:50", state3
+    assert state3["derpy_director_chronicle"] == "table:100", state3
 
     # 16. Nothing in either shipped file resolves loc, anywhere.
     for path in (SCRIPT, LORE):
@@ -2538,6 +2556,13 @@ def _selftest():
     _selftest_poll()
     _selftest_merge()
     _selftest_runaway_merge()
+    _selftest_chronicle()
+    # The Chronicle's rows ship in the Director's loc file, every one, under its prefix: a name the
+    # panel asks for with no row draws an empty line in game.
+    import gen_director_ui as UI
+    shipped = {r["key"]: r["text"] for r in feed_rows()[1]}
+    lost = [k for k, v in UI.CHRONICLE_LOC.items() if shipped.get(UI.LOC_PREFIX + k) != v]
+    assert not lost, "Chronicle loc missing from the shipped loc: %s" % lost
     print("selftest: news buffer and static checks ok")
 
 
@@ -2634,6 +2659,170 @@ def _selftest_runaway_merge():
     assert evals(c) == ["big"], evals(c)
     check_invader_keys()
     print("selftest: runaway merge ok")
+
+
+# The chronicle as the harness's Eval returns it: entries oldest first, joined by " || ", each a
+# sorted "field=value" list joined by ";", a list as {a,b} and a list of lists as {{a,b}}.
+CHRON_DUMP = (
+    "local c = cm:get_saved_value('derpy_director_chronicle') or {} "
+    "local function s(v) if type(v) ~= 'table' then return tostring(v) end "
+    "local o = {} for _, x in ipairs(v) do o[#o + 1] = s(x) end "
+    "return '{' .. table.concat(o, ',') .. '}' end "
+    "local out = {} for _, e in ipairs(c) do local ks = {} for k in pairs(e) do ks[#ks + 1] = k end "
+    "table.sort(ks) local ps = {} for _, k in ipairs(ks) do ps[#ps + 1] = k .. '=' .. s(e[k]) end "
+    "out[#out + 1] = table.concat(ps, ';') end return table.concat(out, ' || ')")
+
+# Every field of every entry is a string, number or boolean, or a list of them nested no deeper
+# than the pact pairs. An interface or a function in the save is a save that cannot be written.
+CHRON_TYPES = (
+    "local c = cm:get_saved_value('derpy_director_chronicle') or {} "
+    "local plain = {string = true, number = true, boolean = true} "
+    "local function ok(v, d) if plain[type(v)] then return true end "
+    "if type(v) ~= 'table' or d > 2 then return false end "
+    "for k, x in pairs(v) do if type(k) ~= 'number' or not ok(x, d + 1) then return false end end "
+    "return true end "
+    "for i, e in ipairs(c) do for k, v in pairs(e) do "
+    "if type(k) ~= 'string' or not ok(v, 1) then return 'entry ' .. i .. ' field ' .. tostring(k) end "
+    "end end return 'ok'")
+
+
+def _chron(calls):
+    """The chronicle from the run's last Eval, as dicts of strings, oldest first."""
+    s = (evals(calls) or [""])[-1]
+    return [dict(p.split("=", 1) for p in e.split(";")) for e in s.split(" || ") if e]
+
+
+def _selftest_chronicle():
+    """33. The Chronicle (2026-11-15): every answered story is recorded with what was done, and so
+    is each of the Director's own events, as keys and numbers only, capped at 100. A situation the
+    roll passes over is not recorded, and the old news buffer is cleared by the first write.
+    """
+    CHD, DWF, EMP, GRN = ("wh3_dlc23_sc_chd_chaos_dwarfs", "wh_main_sc_dwf_dwarfs",
+                          "wh_main_sc_emp_empire", "wh_main_sc_grn_greenskins")
+    dump = lambda turn: {"event": "Eval", "turn": turn, "code": CHRON_DUMP}
+    regions = [{"key": "r_victim", "adj": ["r_near"]}, {"key": "r_near", "adj": ["r_victim"]}]
+    world = [{"name": "sacker", "regions": 20, "subculture": CHD},
+             {"name": "victim", "subculture": CHD, "owns": ["r_victim"], "regions": 3},
+             {"name": "hold_a", "subculture": DWF, "owns": ["r_near"], "regions": 3},
+             {"name": "hold_b", "subculture": DWF, "owns": ["r_near"], "regions": 3}]
+    yes = {"hold_a|hold_b": 5, "hold_b|hold_a": 5}
+    deed = lambda ev, turn=1: [{"event": ev, "instigator": "sacker", "victim": "victim",
+                                "region": "r_victim", "turn": turn}]
+
+    # An answered sack: the deed, who answered it, the pact and the grudge.
+    c, _ = run_lua(world, events=deed("CharacterSackedSettlement") + [dump(1)],
+                   regions_spec=regions, scores=yes)
+    e = _chron(c)
+    assert len(e) == 1, e
+    e = e[0]
+    assert (e["t"], e["k"], e["i"], e["v"], e["r"]) == ("1", "sack", "sacker", "victim",
+                                                         "r_victim"), e
+    assert e["c"] == "{hold_a,hold_b}" and e["p"] == "{{hold_a,hold_b}}" and e["g"] == "hold_a", e
+    assert "u" not in e and "pl" not in e and "m" not in e, e
+    c, _ = run_lua(world, events=deed("CharacterSackedSettlement") +
+                   [{"event": "Eval", "turn": 1, "code": CHRON_TYPES}],
+                   regions_spec=regions, scores=yes)
+    assert evals(c) == ["ok"], evals(c)
+
+    # Passed over by the roll: nothing is recorded.
+    c, _ = run_lua(world, events=deed("CharacterSackedSettlement") + [dump(1)],
+                   regions_spec=regions, scores=yes, seed=100)
+    assert outs(c, "passed over: rolled"), c
+    assert _chron(c) == [], _chron(c)
+
+    # A raze records its plague, a conquest its rebels.
+    c, _ = run_lua(world, events=deed("CharacterRazedSettlement") + [dump(1)],
+                   regions_spec=regions)
+    assert _chron(c)[0]["pl"] == "true", _chron(c)
+    conq_world = [dict(f, owns=["r_victim"]) if f["name"] == "sacker" else
+                  (dict(f, owns=[]) if f["name"] == "victim" else f) for f in world]
+    c, _ = run_lua(conq_world, events=deed("RegionFactionChangeEvent") + [dump(1)],
+                   regions_spec=regions)
+    reb = [x for x in c if x[0] == "force_rebellion_with_faction"]
+    assert reb and _chron(c)[0]["u"] == reb[0][3], (_chron(c), reb)
+
+    # The cap: of 120 answered sacks, the newest 100 are kept, oldest first.
+    many = [deed("CharacterSackedSettlement", t)[0] for t in range(1, 121)] + [dump(120)]
+    c, _ = run_lua(world, events=many, regions_spec=regions, scores=yes)
+    e = _chron(c)
+    turns = [int(x["t"]) for x in e]
+    assert len(e) == 100 and turns == sorted(turns) and turns[-1] == 120, (len(e), turns[:3])
+
+    # The old news buffer is cleared by the first write.
+    old = {"derpy_director_news": [[1, "sack", "a", "b", "r", 2]]}
+    c, st = run_lua(world, events=deed("CharacterSackedSettlement"), regions_spec=regions,
+                    scores=yes, preload=old)
+    assert st["derpy_director_news"] == "nil", st
+    # CA refuses a nil saved value with a script error, so no write may hand it one.
+    assert not [x for x in c if x[0] == "script_error_set_saved_value_nil"], c
+
+    # A runaway merge is part of its story. A last stand is recorded even when the roll then
+    # passes the deed over, because the confederation happened.
+    run = lambda *a, **k: run_lua(*a, quiet_runaway=False, **k)
+    rw = [{"name": "big", "regions": 25, "subculture": EMP},
+          {"name": "second", "regions": 10, "subculture": DWF},
+          {"name": "vic", "regions": 4, "subculture": GRN, "owns": ["r_vic"]},
+          {"name": "kin_a", "regions": 6, "subculture": GRN, "owns": ["r_k"]}]
+    c, _ = run(rw, events=[{"event": "SetBudget", "n": 180, "turn": 12},
+                           {"event": "CharacterSackedSettlement", "instigator": "big",
+                            "victim": "vic", "region": "r_vic", "turn": 12}, dump(12)],
+               regions_spec=MERGE_REGIONS)
+    story = [x for x in _chron(c) if x["k"] == "sack"]
+    assert story and story[0]["m"] == "{kin_a,vic,runaway}", _chron(c)
+    c, _ = run(_merge_world(), events=_merge_conq() + [dump(12)], regions_spec=MERGE_REGIONS,
+               seed=100)
+    assert outs(c, "merge kin_big absorbs vic (last_stand)"), c
+    stand = [x for x in _chron(c) if x.get("m")]
+    assert stand and (stand[0]["k"], stand[0]["m"]) == ("conquest", "{kin_big,vic,last_stand}"), \
+        _chron(c)
+    # The same feud twice in a turn: the first town is answered, and the second is vic's last, so
+    # its confederation is recorded though the feud guard answers nothing further.
+    two = _merge_world(vic={"regions": 2})
+    ev = _merge_conq() + [{"event": "SetRegions", "instigator": "vic", "n": 1, "turn": 12}] + \
+        _merge_conq()[1:] + [dump(12)]
+    c, _ = run(two, events=ev, regions_spec=MERGE_REGIONS)
+    assert outs(c, "already answered this feud this turn"), c
+    assert [x["m"] for x in _chron(c) if x.get("m")] == ["{kin_big,vic,last_stand}"], _chron(c)
+
+    # The runaway step: a rise with its tier, once; an alliance against the leader; the end.
+    tick = lambda t: {"event": "Tick", "turn": t}
+    setr = lambda who, n, t: {"event": "SetRegions", "instigator": who, "n": n, "turn": t}
+    c, _ = run(_runaway_world(), events=[tick(2), setr("leader", 13, 2), tick(4), dump(4)],
+               scores={"c1|c2": 5, "c2|c1": 5})
+    k = [(x["k"], x.get("i"), x.get("n"), x.get("p")) for x in _chron(c)]
+    rise, end = ("runaway_rise", "leader", "2", None), ("runaway_end", "leader", None, None)
+    assert [x[0] for x in k].count("runaway_rise") == 1 and rise in k, k
+    assert ("runaway_pact", "leader", None, "{{c1,c2}}") in k, k
+    assert end in k and k.index(rise) < k.index(end), k
+    # With the threat switched off, the step's measurements are not stories.
+    c, _ = run(_runaway_world(), events=[tick(2), dump(2)], mct={"runaway_threat": False})
+    assert not [x for x in _chron(c) if x["k"] == "runaway_rise"], _chron(c)
+
+    # A war is recorded with its cause (2026-11-15, the user's "why"): the deed its declarer
+    # suffered or was turned against, within ten turns. Told once; a war with no recorded cause,
+    # or one older than the memory, is the AI's own business and is not recorded.
+    war = lambda d, t, turn=3, **k: dict({"event": "NegativeDiplomaticEvent", "instigator": d,
+                                          "victim": t, "turn": turn}, **k)
+    wars = lambda c: [(x["i"], x["v"], x.get("w"), x.get("r"), x.get("x"))
+                      for x in _chron(c) if x["k"] == "war"]
+    stranger = world + [{"name": "stranger", "subculture": GRN, "regions": 3}]
+    c, _ = run_lua(stranger, events=deed("CharacterSackedSettlement") +
+                   [war("hold_a", "sacker"), war("victim", "sacker"), war("hold_a", "sacker"),
+                    war("stranger", "sacker"),
+                    war("victim", "hold_b"), war("hold_b", "sacker", 12),
+                    war("hold_b", "sacker", 4, reason="confederation"),
+                    war("hold_b", "sacker", 4, war=False), dump(12)],
+                   regions_spec=regions, scores=yes)
+    assert wars(c) == [("hold_a", "sacker", "sack", "r_victim", "victim"),
+                       ("victim", "sacker", "sack", "r_victim", "victim")], wars(c)
+    # A war on the feared power names the fear, and not with the threat switched off.
+    c, _ = run(_runaway_world(), events=[tick(2), setr("leader", 13, 2), war("c1", "leader", 2),
+                                         war("c2", "c1", 2), dump(2)])
+    assert wars(c) == [("c1", "leader", "runaway", None, None)], wars(c)
+    c, _ = run(_runaway_world(), events=[tick(2), setr("leader", 13, 2), war("c1", "leader", 2),
+                                         dump(2)], mct={"runaway_threat": False})
+    assert wars(c) == [], wars(c)
+    print("selftest: chronicle ok")
 
 
 CA_EPISODES = os.path.join(ROOT, "Modding Files", "reference", "ca_scripts_wh3", "campaign",
@@ -3452,19 +3641,37 @@ def pack():
 
     _selftest()
 
+    # The Chronicle: its script, its four UI files and the hub copy that puts its button in the
+    # Derpy hub. Generated files ship only as their generators would write them now.
+    import gen_director_ui as UI
+    import sync_derpy_hub as HUB
+    stale = HUB.check()
+    for p in stale:
+        print(p)
+    if UI.main(["--check"]) or stale:
+        raise SystemExit("the Chronicle's UI files or the hub copies are stale or faulty - run "
+                         "py tools/gen_director_ui.py and py tools/sync_derpy_hub.py first")
+    extra = [(UI.LUA, IN_PACK_CHRONICLE)]
+    extra += [(os.path.join(UI.OUT, n), "ui/campaign ui/" + n) for n in sorted(UI.build())]
+    extra += [(os.path.join(ROOT, src), dst) for src, dst in HUB.pack_files("dr")]
+
     # The feed tables are created at explicit versions, so nothing here needs the vanilla data.
     ensure_game()
 
     if os.path.exists(PACK):
         stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        shutil.copy2(PACK, "%s.bak_%s" % (PACK, stamp))
-        print("backed up the existing pack")
+        os.makedirs(BACKUP_DIR, exist_ok=True)
+        dest = os.path.join(BACKUP_DIR, "derpy_director_%s.pack" % stamp)
+        shutil.copy2(PACK, dest)
+        print("backed up the existing pack to %s" % dest)
         key = open_pack(PACK)
     else:
         key = new_pack()
 
-    call("add_files_from_disk", {"pack": key, "paths": [SCRIPT, LORE, MCT_PAGE],
-                                 "pack_paths": [IN_PACK, IN_PACK_LORE, IN_PACK_MCT]})
+    call("add_files_from_disk", {"pack": key,
+                                 "paths": [SCRIPT, LORE, MCT_PAGE] + [s for s, _d in extra],
+                                 "pack_paths": [IN_PACK, IN_PACK_LORE, IN_PACK_MCT]
+                                 + [d for _s, d in extra]})
 
     # The feed's five tables and its loc. create_file makes the empty fragment (a refreshed pack
     # already has it), import_tsv fills it - and import_tsv REPLACES the whole file, so the TSV
@@ -3485,6 +3692,7 @@ def pack():
     call("close_pack", {"pack": key})
     again = open_pack(PACK)
     wanted = [IN_PACK, IN_PACK_LORE, IN_PACK_MCT, "text/db/%s.loc" % FRAG]
+    wanted += [d for _s, d in extra]
     wanted += ["db/%s_tables/%s" % (t, FRAG) for t, _v in FEED_TABLES]
     missing = [w for w in wanted if not exists(again, w)]
     assert not missing, "not in the saved pack: %s" % missing

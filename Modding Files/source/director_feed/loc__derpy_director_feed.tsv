@@ -210,3 +210,41 @@ event_feed_strings_text_derpy_director_feed_grudge_wh_main_sc_vmp_vampire_counts
 event_feed_strings_text_derpy_director_feed_pact_wh_main_sc_vmp_vampire_counts_title	Common Cause	false
 event_feed_strings_text_derpy_director_feed_pact_wh_main_sc_vmp_vampire_counts_primary	The {{tr:cultures_subcultures_name_wh_main_sc_vmp_vampire_counts}} have signed a defensive alliance with another power that shares their enemy. Each will now answer if the other is attacked.	false
 event_feed_strings_text_derpy_director_feed_pact_wh_main_sc_vmp_vampire_counts_secondary	The attacker now faces two swords where yesterday there was one.	false
+derpy_director_chronicle_title	The World Chronicle	false
+derpy_director_chronicle_label_temper	This World	false
+derpy_director_chronicle_label_hatred	An Old Hatred	false
+derpy_director_chronicle_label_ambitious	The Ambitious	false
+derpy_director_chronicle_unknown	Not yet known	false
+derpy_director_chronicle_none	None	false
+derpy_director_chronicle_empty	Nothing worth recording has happened yet.	false
+derpy_director_chronicle_turn	Turn {t}	false
+derpy_director_chronicle_list_two	{a} and {b}	false
+derpy_director_chronicle_deed_sack	{i} sacked {r}, a settlement of {v}.	false
+derpy_director_chronicle_deed_raze	{i} razed {r}, a settlement of {v}.	false
+derpy_director_chronicle_deed_conquest	{i} took {r} from {v}.	false
+derpy_director_chronicle_deed_confederation	{i} took {v} into a confederation.	false
+derpy_director_chronicle_deed_treachery	{i} broke its treaty with {v}.	false
+derpy_director_chronicle_deed_opportunism	{i} lost ground to {v}, and old enemies saw their chance.	false
+derpy_director_chronicle_deed_seizure	{i} seized a convoy belonging to {v}.	false
+derpy_director_chronicle_deed_secession	{r} broke away from {i}.	false
+derpy_director_chronicle_answered	{list} turned against {i}.	false
+derpy_director_chronicle_pact	{a} and {b} signed a defensive alliance against {i}.	false
+derpy_director_chronicle_grudge	{g} will not forget it.	false
+derpy_director_chronicle_rebels	Rebels rose in {r}.	false
+derpy_director_chronicle_plague	Plague broke out in the ruins of {r}.	false
+derpy_director_chronicle_merge_last_stand	Close to defeat, {b} joined {a} in a confederation.	false
+derpy_director_chronicle_merge_runaway	{b} joined {a} in a confederation to stand against {i}.	false
+derpy_director_chronicle_rise_1	The world began to fear {i}.	false
+derpy_director_chronicle_rise_2	Fear of {i} spread across the world.	false
+derpy_director_chronicle_rise_3	{i} became the terror of the world.	false
+derpy_director_chronicle_runaway_end	{i} is no longer feared above all others.	false
+derpy_director_chronicle_runaway_pact	{a} and {b} allied against {i}.	false
+derpy_director_chronicle_war_sack	{i} declared war on {v} over the sack of {r}.	false
+derpy_director_chronicle_war_raze	{i} declared war on {v} over the razing of {r}.	false
+derpy_director_chronicle_war_conquest	{i} declared war on {v} over the fall of {r}.	false
+derpy_director_chronicle_war_confederation	{i} declared war on {v}, which had taken {x} into a confederation.	false
+derpy_director_chronicle_war_treachery	{i} declared war on {v}, which had broken its treaty with {x}.	false
+derpy_director_chronicle_war_opportunism	{i} declared war on {v}, seeing it weakened.	false
+derpy_director_chronicle_war_seizure	{i} declared war on {v}, which had seized a convoy belonging to {x}.	false
+derpy_director_chronicle_war_secession	{i} declared war on {v} after {r} broke away from it.	false
+derpy_director_chronicle_war_runaway	{i} declared war on {v}, fearing its power.	false

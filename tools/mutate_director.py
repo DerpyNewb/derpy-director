@@ -76,8 +76,8 @@ MUTANTS = [
      "and not f:is_rebel() and not f:is_human()\n\t\t\t\tand f:name() ~= leader_key",
      "and not f:is_rebel()\n\t\t\t\tand f:name() ~= leader_key"),
     ("the alliance switch is ignored",
-     "if self:setting(\"runaway_alliances\") then self:poll_alliances(batch, st) end",
-     "self:poll_alliances(batch, st)"),
+     "if self:setting(\"runaway_alliances\") then self:poll_alliances(batch, st, leader:name()) end",
+     "self:poll_alliances(batch, st, leader:name())"),
     ("multiplayer reads MCT",
      "if ok_mp and mp == true then return default end", "if false then return default end"),
     ("MCT values are not type-checked",
@@ -170,12 +170,14 @@ MUTANTS = [
      "\t-- Before anything is priced. Every town is still logged; the feud is answered once.\n"
      "\tif not self:first_of_feud_this_turn(sit) then\n"
      "\t\tlog(\"already answered this feud this turn, nothing further\")\n"
+     "\t\tself:news(sit, {})\n"
      "\t\treturn\n"
      "\tend\n",
      "\n"
      "\t-- Before anything is priced. Every town is still logged; the feud is answered once.\n"
      "\tif not self:first_of_feud_this_turn(sit) then\n"
      "\t\tlog(\"already answered this feud this turn, nothing further\")\n"
+     "\t\tself:news(sit, {})\n"
      "\t\treturn\n"
      "\tend\n"
      "\tif self:last_stand(sit) then sit.merged = true end\n"),
@@ -256,8 +258,8 @@ MUTANTS = [
     ("the generic pact row collides with a culture grudge row",
      "pact = {index = 7400, key = \"pact\"},",
      "pact = {index = 7302, key = \"pact\"},"),
-    ("the news buffer is unbounded",
-     "while #buf > NEWS_CAP do", "while false do"),
+    ("the chronicle is unbounded",
+     "while #buf > CHRONICLE_CAP do", "while false do"),
     ("the cast sort has no tiebreak",
      "if x.score ~= y.score then return x.score > y.score end\n\t\treturn x.name < y.name",
      "if x.score ~= y.score then return x.score > y.score end\n\t\treturn false"),
@@ -589,6 +591,7 @@ MUTANTS = [
     ("the temple is asked once per town, not once per feud",
      "\tif not self:first_of_feud_this_turn(sit) then\n"
      "\t\tlog(\"already answered this feud this turn, nothing further\")\n"
+     "\t\tself:news(sit, {})\n"
      "\t\treturn\n"
      "\tend\n"
      "\n"
@@ -597,8 +600,76 @@ MUTANTS = [
      "\tself:beat_temple(sit, why)\n"
      "\tif not self:first_of_feud_this_turn(sit) then\n"
      "\t\tlog(\"already answered this feud this turn, nothing further\")\n"
+     "\t\tself:news(sit, {})\n"
      "\t\treturn\n"
      "\tend\n"),
+    # The Chronicle (2026-11-15).
+    ("a passed-over situation is recorded",
+     "if #cast == 0 and not sit.merge then return end", "if false then return end"),
+    ("the old news buffer is kept",
+     "if cm:get_saved_value(\"derpy_director_news\") ~= nil then", "if false then"),
+    ("an interface goes into the chronicle",
+     "for i = 1, #cast do c[i] = cast[i] end",
+     "for i = 1, #cast do c[i] = cm:get_faction(cast[i]) end"),
+    ("pacts are not recorded",
+     "sit.pacts[#sit.pacts + 1] = {pa, pb}", "local _ = pa"),
+    ("the grudge is not recorded", "sit.grudge = cast[1]", "local _ = cast[1]"),
+    ("rebels are not recorded",
+     "if self:beat_unrest(sit, units) then sit.rebels = units end", "self:beat_unrest(sit, units)"),
+    ("the plague is not recorded",
+     "sit.plague = self:beat_plague(sit) or nil", "self:beat_plague(sit)"),
+    ("a confederation is not recorded", "sit.merge = {absorber, target, mode}", "local _ = mode"),
+    ("a repeat feud's last stand is not recorded",
+     "nothing further\")\n\t\tself:news(sit, {})", "nothing further\")"),
+    ("a runaway's rise is not recorded",
+     "self:chronicle({t = turn, k = \"runaway_rise\", i = leader_key, n = tier})", "local _ = tier"),
+    ("a runaway's rise is recorded every turn it holds",
+     "if tier > 0 and (tier > st.tier or st.leader_key ~= leader_key) then", "if tier > 0 then"),
+    ("a runaway's end is not recorded",
+     "self:chronicle({t = turn, k = \"runaway_end\", i = st.leader_key})", "local _ = turn"),
+    ("an alliance against a runaway is not recorded",
+     "self:chronicle({t = turn, k = \"runaway_pact\", i = leader_key, p = {{a_key, b_key}}})",
+     "local _ = turn"),
+    ("a runaway is recorded with the threat switched off",
+     "function derpy_director:chronicle_runaway(turn, leader_key, tier, st)\n"
+     "\tif not self:setting(\"runaway_threat\") then return end",
+     "function derpy_director:chronicle_runaway(turn, leader_key, tier, st)"),
+    ("the old news is set to nil, which CA's set_saved_value refuses",
+     "cm:clear_saved_value(\"derpy_director_news\")",
+     "cm:set_saved_value(\"derpy_director_news\", nil)"),
+    # ---- why a war was declared (2026-11-15) ----
+    ("a war is never recorded",
+     "guarded(\"war\", function() derpy_director:note_war(context) end)",
+     "guarded(\"war\", function() local _ = context end)"),
+    ("a broken trade deal is recorded as a war",
+     "if not context:is_war() or context:result_of_confederation() then return end",
+     "if context:result_of_confederation() then return end"),
+    ("a confederation's war is recorded",
+     "if not context:is_war() or context:result_of_confederation() then return end",
+     "if not context:is_war() then return end"),
+    ("a war is told twice",
+     "if e.k == \"war\" and e.i == dk and e.v == tk then return end",
+     "if false then return end"),
+    ("the war memory never fades",
+     "if turn - (e.t or 0) > WAR_MEMORY then break end",
+     "if false then break end"),
+    ("a stranger's war is given a cause",
+     "local wronged = e.v == dk\n", "local wronged = true\n"),
+    ("the cast's war is given no cause",
+     "for j = 1, #e.c do if e.c[j] == dk then wronged = true end end",
+     "for j = 1, #e.c do if false then wronged = true end end"),
+    ("the victim's own war is given no cause",
+     "local wronged = e.v == dk\n", "local wronged = false\n"),
+    ("a war loses where its cause happened",
+     "w = e.k, r = e.r, x = e.v})", "w = e.k})"),
+    ("a war on the feared power is not recorded",
+     "self:chronicle({t = turn, k = \"war\", i = dk, v = tk, w = \"runaway\"})",
+     "local _ = st"),
+    ("the fear is named with the threat switched off",
+     "if self:setting(\"runaway_threat\") and type(st) == \"table\" and (st.tier or 0) > 0",
+     "if type(st) == \"table\" and (st.tier or 0) > 0"),
+    ("every war is blamed on the feared power",
+     "\t\t\tand st.leader_key == tk then\n", "\t\t\tthen\n"),
 ]
 
 

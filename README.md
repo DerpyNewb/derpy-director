@@ -30,6 +30,12 @@ design record.
   runaway power, or one of CA's endgame invasions, takes a town, the defender's kin confederate to face it, the
   larger taking in the smaller. Only what the game itself would allow happens, and never to a player's faction. In
   a 56-turn test campaign, eight factions joined their kin this way.
+- **The World Chronicle.** A panel, opened from a button beside the resource bar, that lists what happened this
+  campaign, newest first and grouped by turn: who sacked or seized what, who turned against them, the pacts, the
+  grudges, the confederations and the rise and fall of a runaway power. When a faction declares war over something
+  the Chronicle already records, the war is listed with its cause: "Karak Hirn declared war on Clan Mors over the
+  sack of Karak Azul." Above the list it names the campaign's temperament, its old hatred and its ambitious
+  factions. With another of Derpy's mods that uses the shared button hub, the Chronicle's button joins the hub.
 - **Settings.** An MCT (Mod Configuration Tool) page with 34 options: each trigger, the cost, the per-turn limit, the
   first turn, and a switch per race. Multiplayer always uses the defaults, so two players cannot fall out of step.
 - **Works with Derpy's other mods when they are installed**, with no edit to them: Resource Overhaul's seized
@@ -58,10 +64,15 @@ was merged into the Director on 2026-11-14 and deleted, and its design and sessi
 Modding Files/pack/script/campaign/mod/derpy_director.lua        the campaign script
 Modding Files/pack/script/campaign/mod/derpy_director_lore.lua   generated: CA's cultural relations, MCT defaults, races
 Modding Files/pack/script/mct/settings/derpy_director.lua        generated: the MCT page
+Modding Files/pack/script/campaign/mod/derpy_director_chronicle.lua  the World Chronicle panel's script
+Modding Files/pack/ui/campaign ui/derpy_director_*.twui.xml       generated: the Chronicle's five UI files
+Modding Files/pack/script/campaign/mod/derpy_hub_dr.lua, ..._hub_*dr.twui.xml   the shared button hub's copy
+Modding Files/source/derpy_hub/derpy_hud_hub.lua                  the hub's source, stamped into every copy
 Modding Files/source/director_feed/*.tsv                          generated: the event-feed rows and their text
 Modding Files/source/director/probes/                             live-game probes and the soak statistics
 tools/build_director.py                                           generator, Lua harness and packer
 tools/mutate_director.py                                          the mutation runner
+tools/gen_director_ui.py, tools/preview_director.py               the Chronicle's UI generator and offline preview
 tools/*.py, tools/wh3_player_shield.lua                           what those two need, and the soak's player shield
 docs/superpowers/specs, docs/superpowers/plans                    designs and plans, the Supervisor's included
 docs/history/                                                     the session handoffs, in order
@@ -80,11 +91,16 @@ The generated files are committed so the repository reads without running anythi
   pass every test and then fail in game.
 - **Every rule, broken on purpose.** `py tools/mutate_director.py` breaks the script one rule at a time (a guard
   removed, a limit lifted, a sort dropped, a key misspelt), runs the self-test against each break, and restores the
-  file. A break the self-test does not notice is a missing test. The current run: 214 breaks, all caught.
+  file. A break the self-test does not notice is a missing test. The current run: 240 breaks, all caught.
+- **The Chronicle, drawn offline.** `py tools/preview_director.py --selftest` runs the panel's script against fake
+  components built from its own `.twui.xml` files and checks every sentence word for word, the turn headings and
+  rules, the indents and the header. Without `--selftest` it draws the panel at its hardest case (100 entries, the
+  longest names in the game) and fails on a line wider than its box or text below 4.5:1 contrast.
 - **In the game.** A 56-turn campaign as Karl Franz on Very Hard, with the player kept out of wars, followed by
   forced last stands on that world. The results are in section 8 of
   `docs/superpowers/specs/2026-11-14-director-merges-coalitions-design.md`, including a bug the run found and the
-  test that now pins it.
+  test that now pins it. The Chronicle was opened, scrolled, closed and reopened in game, and a real war
+  declaration recorded its cause; section 8 of `docs/superpowers/specs/2026-11-15-director-chronicle-design.md`.
 
 ## Running it
 
@@ -103,6 +119,11 @@ Two checks need CA's own files, which are not published here, and the self-test 
 are absent: the API check reads CA's scripting docs from the Assembly Kit in
 `Modding Files/reference/ca_script_docs_wh3/`, and the invader-key check reads CA's shipped episode and crisis scripts
 in `Modding Files/reference/ca_scripts_wh3/`.
+
+The Chronicle's tools need more. `tools/gen_director_ui.py` needs `gen_guilds_ui.py` from the
+[derpy-great-guilds](https://github.com/DerpyNewb/derpy-great-guilds) repository beside it (CA's scroll bar and the
+scroll check). `tools/preview_director.py` needs Pillow, a local copy of TWUI Studio (its `pyc` or `src` folder in
+`TWUI_Studio/`, which is not published here) and your own install, from which it extracts the CA art the panel uses.
 
 `py tools/build_director.py` builds `Modding Files/Modpacks/derpy_director.pack`. The probes run inside a live
 campaign through the WH3 MCP bridge (`loadfile`, then call, inside a `pcall`).

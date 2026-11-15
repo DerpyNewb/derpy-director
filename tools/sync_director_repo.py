@@ -10,10 +10,14 @@ The workspace is the source of truth; the repo is a copy with the same layout, s
 
 Then commit and push from inside the repo folder.
 
-Published: the campaign script, its generated lore table and MCT page, the event-feed rows, the builder with its Lua
-harness and the mutation runner, their import closure (the offline vanilla readers, the RPFM client, the Lua checks),
+Published: the campaign script, its generated lore table and MCT page, the event-feed rows, the World Chronicle
+(its script, the five generated .twui.xml files, their generator and the offline preview), the Derpy hub copy that
+puts the Chronicle's button in the shared hub, the builder with its Lua harness and the mutation runner, their import closure (the offline vanilla readers, the RPFM client, the Lua checks),
 the live-game probes and the player shield they load, the design specs and plans (the Coalition Supervisor's included,
 since the Director absorbed it), the session handoffs as docs/history/, and the campaign-AI and diplomacy references.
+
+Regenerating the .twui.xml files needs gen_guilds_ui.py (CA's slider builder and the scroll check) from the
+derpy-great-guilds repository, as the Iron Court's repository does; the published files are what it wrote.
 
 NOTHING OF CA'S OR GW'S IS PUBLISHED: no .pack, no .loc, no game art, and nothing under Modding Files/reference/,
 where CA's scripting docs and shipped scripts live. The builder reads CA's tables from the player's own install, and
@@ -30,11 +34,19 @@ import sync_guilds_repo as SG
 ROOT = SG.ROOT
 REPO = os.path.join(ROOT, "repos", "derpy-director")
 
+_UI = "Modding Files/pack/ui/campaign ui/"
 PACKED = [
     "Modding Files/pack/script/campaign/mod/derpy_director.lua",
     "Modding Files/pack/script/campaign/mod/derpy_director_lore.lua",
     "Modding Files/pack/script/mct/settings/derpy_director.lua",
-]
+    # the World Chronicle (2026-11-15) and the hub copy that holds its button
+    "Modding Files/pack/script/campaign/mod/derpy_director_chronicle.lua",
+    "Modding Files/pack/script/campaign/mod/derpy_hub_dr.lua",
+] + [_UI + n + ".twui.xml" for n in (
+    "derpy_director_panel", "derpy_director_list", "derpy_director_line", "derpy_director_rule",
+    "derpy_director_button", "derpy_hub_dr", "derpy_hub_plate_dr")]
+# The hub's source, which sync_derpy_hub.py stamps into every mod's copy.
+HUB_SOURCE = ["Modding Files/source/derpy_hub/derpy_hud_hub.lua"]
 SOURCES = ["Modding Files/source/director_feed", "Modding Files/source/director"]
 TOOLS = [
     # the builder (generator, Lua harness, packer) and the mutation runner
@@ -42,6 +54,10 @@ TOOLS = [
     # the import closure: reading CA's tables from your own install, and RPFM for the pack
     "read_vanilla_db.py", "read_vanilla_loc.py", "read_vanilla_cache.py", "read_pack_index.py",
     "fetch_vanilla_tables.py", "check_skill_trees.py", "rpfm_client.py", "rpfm_mcp_bridge.py",
+    # the World Chronicle's UI generator and offline preview, the shared emitter and .twui.xml reader they
+    # use, and the hub's copier
+    "gen_director_ui.py", "preview_director.py", "gen_guilds_emitter.py", "preview_guilds_panel.py",
+    "sync_derpy_hub.py",
     # the Lua checks the self-test runs, and the game-compiler check
     "check_lua_api.py", "check_lua_undeclared.py", "check_lua_literal_left.py",
     # the player shield the soak helper loads
@@ -53,6 +69,7 @@ DESIGN = [
     "specs/2026-09-13-ai-coalition-supervisor-design.md", "plans/2026-09-13-ai-coalition-supervisor.md",
     "specs/2026-09-16-ai-director-design.md", "plans/2026-09-16-ai-director-phase1.md",
     "specs/2026-11-14-director-merges-coalitions-design.md", "plans/2026-11-14-director-merges-coalitions.md",
+    "specs/2026-11-15-director-chronicle-design.md", "plans/2026-11-15-director-chronicle.md",
 ]
 HISTORY = ["HANDOFF_20260913_AI_GAPS_AND_COALITIONS.md", "HANDOFF_20260913_AI_COALITION_SUPERVISOR_BUILT.md",
            "HANDOFF_20260916_COALITION_SOAK_AND_AI_DIRECTOR_RESEARCH.md",
@@ -61,7 +78,7 @@ HISTORY = ["HANDOFF_20260913_AI_GAPS_AND_COALITIONS.md", "HANDOFF_20260913_AI_CO
 REFERENCE = ["CAMPAIGN_AI.md", "DIPLOMACY.md"]
 
 REFUSED_EXT = (".png", ".gif", ".mp4", ".dds", ".jpg", ".jpeg", ".webp", ".tga", ".pack", ".bin", ".loc", ".anim",
-               ".wem", ".twui.xml", ".xlsx", ".json", ".npz", ".txt", ".html")
+               ".wem", ".xlsx", ".json", ".npz", ".txt", ".html")
 PRIVATE = re.compile(r"[A-Za-z]:[\\/]+Users[\\/]+[^\\/\s]+", re.I)
 DECOMPILED = re.compile(r"^```c\s*$", re.M)
 
@@ -77,7 +94,7 @@ def _walk(rel, exts):
 
 
 def manifest():
-    out = [(p, p) for p in PACKED]
+    out = [(p, p) for p in PACKED + HUB_SOURCE]
     for rel in SOURCES:
         out += [(p, p) for p in _walk(rel, (".tsv", ".lua", ".py"))]
     out += [("tools/" + n, "tools/" + n) for n in TOOLS]

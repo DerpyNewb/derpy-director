@@ -894,7 +894,7 @@ end
 
 -- Through the pact machinery: at_odds first, both directions asked, the SUM rule (both-positive
 -- never opened in about 50 live Supervisor asks), and PRICE.force out of the budget.
-function derpy_director:poll_alliances(batch, st)
+function derpy_director:poll_alliances(batch, st, leader_key)
 	local turn = cm:model():turn_number()
 	if st.formed_turn ~= turn then st.formed_turn, st.formed_count = turn, 0 end
 	for _, pair in ipairs(batch) do
@@ -914,12 +914,26 @@ function derpy_director:poll_alliances(batch, st)
 				local sa, sb, oa, ob = self:beat_ask(a_key, b_key, DEAL)
 				if oa and ob and sa and sb and sa + sb > 0 and self:afford(PRICE.force) then
 					self:beat_force(a_key, b_key)
+					self:chronicle({t = turn, k = "runaway_pact", i = leader_key, p = {{a_key, b_key}}})
 					st.alliances[a_key] = (st.alliances[a_key] or 0) + 1
 					st.alliances[b_key] = (st.alliances[b_key] or 0) + 1
 					st.formed_count = st.formed_count + 1
 				end
 			end
 		end
+	end
+end
+
+-- The Chronicle hears of a runaway when the world's fear of it rises (or a new faction takes the
+-- lead) and when it ends; a tier merely holding, or easing a step, is not news. Under the threat
+-- score's switch, because the threat is what the fear is: with it off, nothing fears anyone.
+-- Called before st.tier is overwritten.
+function derpy_director:chronicle_runaway(turn, leader_key, tier, st)
+	if not self:setting("runaway_threat") then return end
+	if tier > 0 and (tier > st.tier or st.leader_key ~= leader_key) then
+		self:chronicle({t = turn, k = "runaway_rise", i = leader_key, n = tier})
+	elseif tier == 0 and st.tier > 0 and st.leader_key then
+		self:chronicle({t = turn, k = "runaway_end", i = st.leader_key})
 	end
 end
 
@@ -932,6 +946,7 @@ function derpy_director:runaway_turn()
 		-- the rest of the campaign.
 		log(string.format("runaway turn=%d no runner-up, releasing", turn))
 		self:apply_threat(nil, 0, st)
+		self:chronicle_runaway(turn, nil, 0, st)
 		if st.tier > 0 then st.last_event_tier = 0 end
 		st.tier, st.leader_key = 0, nil
 		cm:set_saved_value("derpy_director_runaway", st)
@@ -963,8 +978,9 @@ function derpy_director:runaway_turn()
 			end
 			st.last_event_tier = tier
 		end
-		if self:setting("runaway_alliances") then self:poll_alliances(batch, st) end
+		if self:setting("runaway_alliances") then self:poll_alliances(batch, st, leader:name()) end
 	end
+	self:chronicle_runaway(turn, leader:name(), tier, st)
 	st.tier = tier
 	st.leader_key = tier > 0 and leader:name() or nil
 	cm:set_saved_value("derpy_director_runaway", st)
@@ -1216,6 +1232,7 @@ function derpy_director:try_merge(sit, mode)
 				self:afford(price)
 				cm:set_saved_value("derpy_director_merge_turn", turn)
 				cm:set_saved_value("derpy_director_merge_count", n)
+				sit.merge = {absorber, target, mode}
 				return true
 			end
 		end
@@ -1411,17 +1428,71 @@ function derpy_director:beat_temple(sit, why)
 	return true
 end
 
-local NEWS_CAP = 50
+local CHRONICLE_CAP = 100
 
--- Keys and numbers only: a loc call from a listener CTDs at turn 1, past pcall. It also keeps
--- the buffer small, and it rides in the save all campaign.
-function derpy_director:news(sit, cast_size)
-	local buf = cm:get_saved_value("derpy_director_news")
+-- THE CHRONICLE (2026-11-15), which derpy_director_chronicle.lua draws. Keys and numbers only: a
+-- loc call from a listener CTDs at turn 1, past pcall, so every name and sentence is resolved when
+-- the panel draws. Capped, because it rides in the save all campaign. Written only from model
+-- events, so every machine in a multiplayer game writes the same one.
+function derpy_director:chronicle(entry)
+	local buf = cm:get_saved_value("derpy_director_chronicle")
+	if type(buf) ~= "table" then
+		buf = {}
+		-- The news buffer this replaced (50 entries of another shape), freed by the first write.
+		-- clear_saved_value, never set_saved_value(key, nil): CA's set refuses nil with a script
+		-- error and keeps the old value (lib_campaign_manager.lua:1860).
+		if cm:get_saved_value("derpy_director_news") ~= nil then
+			cm:clear_saved_value("derpy_director_news")
+		end
+	end
+	buf[#buf + 1] = entry
+	while #buf > CHRONICLE_CAP do table.remove(buf, 1) end
+	cm:set_saved_value("derpy_director_chronicle", buf)
+end
+
+-- A story: the deed and what answered it, as the beats noted it on the situation. A deed nobody
+-- answered and nobody confederated over is not one.
+function derpy_director:news(sit, cast)
+	if #cast == 0 and not sit.merge then return end
+	local c = {}
+	for i = 1, #cast do c[i] = cast[i] end
+	self:chronicle({t = sit.turn, k = sit.kind, i = sit.instigator, v = sit.victim,
+		r = sit.region or "", c = c, p = sit.pacts, g = sit.grudge, u = sit.rebels,
+		pl = sit.plague, m = sit.merge})
+end
+
+-- A war is a story only when the Chronicle already holds its cause: a deed by the target that the
+-- declarer suffered or was turned against, within WAR_MEMORY turns, or the target being the power
+-- the world fears. A war with no recorded cause is the AI's own business, and is not guessed at.
+local WAR_MEMORY = 10
+function derpy_director:note_war(context)
+	if not context:is_war() or context:result_of_confederation() then return end
+	local d, t = context:proposer(), context:recipient()
+	if not d or d:is_null_interface() or not t or t:is_null_interface() then return end
+	local dk, tk = d:name(), t:name()
+	if dk == tk then return end
+	local turn = cm:model():turn_number()
+	local buf = cm:get_saved_value("derpy_director_chronicle")
 	if type(buf) ~= "table" then buf = {} end
-	buf[#buf + 1] = {sit.turn, sit.kind, sit.instigator, sit.victim, tostring(sit.region),
-		cast_size}
-	while #buf > NEWS_CAP do table.remove(buf, 1) end
-	cm:set_saved_value("derpy_director_news", buf)
+	for i = #buf, 1, -1 do
+		local e = buf[i]
+		if turn - (e.t or 0) > WAR_MEMORY then break end
+		if e.k == "war" and e.i == dk and e.v == tk then return end
+		-- Only a story carries a cast; the runaway step's entries do not.
+		if e.c and e.i == tk then
+			local wronged = e.v == dk
+			for j = 1, #e.c do if e.c[j] == dk then wronged = true end end
+			if wronged then
+				self:chronicle({t = turn, k = "war", i = dk, v = tk, w = e.k, r = e.r, x = e.v})
+				return
+			end
+		end
+	end
+	local st = cm:get_saved_value("derpy_director_runaway")
+	if self:setting("runaway_threat") and type(st) == "table" and (st.tier or 0) > 0
+			and st.leader_key == tk then
+		self:chronicle({t = turn, k = "war", i = dk, v = tk, w = "runaway"})
+	end
 end
 
 -- The settlement's logical position, which show_message_event_located takes. Nil without one.
@@ -1658,6 +1729,7 @@ function derpy_director:respond(sit)
 	-- Before anything is priced. Every town is still logged; the feud is answered once.
 	if not self:first_of_feud_this_turn(sit) then
 		log("already answered this feud this turn, nothing further")
+		self:news(sit, {})
 		return
 	end
 
@@ -1666,7 +1738,7 @@ function derpy_director:respond(sit)
 
 	-- After the feud guard, so a province of towns is one roll, not one per town.
 	if not self:chosen(sit) then
-		self:news(sit, 0)
+		self:news(sit, {})
 		return
 	end
 
@@ -1688,7 +1760,7 @@ function derpy_director:respond(sit)
 
 	-- Nobody in reach cared, so spend nothing.
 	if #cast == 0 then
-		self:news(sit, 0)
+		self:news(sit, cast)
 		return
 	end
 
@@ -1720,6 +1792,8 @@ function derpy_director:respond(sit)
 			-- 151 live asks min(sa, sb) never rose above -1.12, so both-positive never opened.
 			if oa and ob and sa and sb and sa + sb > 0 and self:afford(PRICE.force) then
 				self:beat_force(pa, pb)
+				sit.pacts = sit.pacts or {}
+				sit.pacts[#sit.pacts + 1] = {pa, pb}
 				landed = true
 				if not one_tell then self:beat_tell(sit, "pact", cast) end
 				-- A new coalition funds a muster and shields the settlement it formed over, sized
@@ -1757,6 +1831,7 @@ function derpy_director:respond(sit)
 		-- with no budget does not burn the feud.
 		if self:grudge_slot(sit.turn) and self:afford(PRICE.past_event) then
 			self:beat_past_event(sit.instigator, cast[1])
+			sit.grudge = cast[1]
 			self:set_cooldown(cast[1])
 			landed = true
 			-- The grudge records say a settlement was sacked; a seized convoy has its own.
@@ -1776,15 +1851,16 @@ function derpy_director:respond(sit)
 	-- Per-kind consequences. Both are irreversible, so both sit behind the outrage floor too.
 	if outrage >= OUTRAGE_FLOOR then
 		if sit.kind == "raze" and self:afford(PRICE.plague) then
-			self:beat_plague(sit)
+			sit.plague = self:beat_plague(sit) or nil
 		-- Unrest also needs UNREST_FLOOR; razing is rarer, so the plague keeps the lower one.
 		elseif sit.kind == "conquest" and outrage >= UNREST_FLOOR
 			   and self:afford(PRICE.unrest) then
-			self:beat_unrest(sit, math.floor(REBEL_UNITS * self:size_scale(sit.instigator) + 0.5))
+			local units = math.floor(REBEL_UNITS * self:size_scale(sit.instigator) + 0.5)
+			if self:beat_unrest(sit, units) then sit.rebels = units end
 		end
 	end
 
-	self:news(sit, #cast)
+	self:news(sit, cast)
 end
 
 -- At each turn start, by the temperament: more on its ON turns than its OFF ones, and a wild
@@ -1978,6 +2054,16 @@ core:add_listener(
 			guarded("runaway step", function() derpy_director:runaway_turn() end)
 			guarded("opportunity", function() derpy_director:opportunity() end)
 		end
+	end,
+	true
+)
+
+core:add_listener(
+	"derpy_director_war",
+	"NegativeDiplomaticEvent",
+	true,
+	function(context)
+		if ENABLED then guarded("war", function() derpy_director:note_war(context) end) end
 	end,
 	true
 )

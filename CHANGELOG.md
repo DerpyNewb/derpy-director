@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-11-15, the World Chronicle
+
+- New panel: the World Chronicle. It lists what happened this campaign, newest first and grouped by turn, under the
+  campaign's temperament, old hatred and ambitious factions. Its button sits beside the resource bar, or in the
+  shared button hub when another of Derpy's hub mods is installed.
+- A war is listed with its cause when the Chronicle already records one: a sack, a betrayal, a seized convoy and the
+  rest, or fear of a runaway power. Wars with no recorded cause are left out.
+- The defensive alliance line now says who it is against.
+- The Chronicle replaces the old 50-entry news buffer, which is cleared from a save the first time the Chronicle
+  writes. It holds the newest 100 entries.
+
 ## 2026-11-14, first public release
 
 - The Coalition Supervisor is part of the Director. The runaway power's threat score, its grudge and the defensive
