@@ -637,6 +637,12 @@ MUTANTS = [
     ("the old news is set to nil, which CA's set_saved_value refuses",
      "cm:clear_saved_value(\"derpy_director_news\")",
      "cm:set_saved_value(\"derpy_director_news\", nil)"),
+    ("the war chest's gold is left out of its pact",
+     "if paid_a and paid_b then sit.pacts[#sit.pacts][3] = gold end",
+     "local _ = paid_a and paid_b"),
+    ("a cast the budget could not turn is still said to have turned against the instigator",
+     "\tif not sit.turned then cast = {} end\n",
+     ""),
     # ---- why a war was declared (2026-11-15) ----
     ("a war is never recorded",
      "guarded(\"war\", function() derpy_director:note_war(context) end)",

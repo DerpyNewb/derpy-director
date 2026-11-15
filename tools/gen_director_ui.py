@@ -140,6 +140,7 @@ CHRONICLE_LOC = {
     "deed_secession": "{r} broke away from {i}.",
     "answered": "{list} turned against {i}.",
     "pact": "{a} and {b} signed a defensive alliance against {i}.",
+    "pact_chest": "{a} and {b} signed a defensive alliance against {i} and raised {n} gold each for the war.",
     "grudge": "{g} will not forget it.",
     "rebels": "Rebels rose in {r}.",
     "plague": "Plague broke out in the ruins of {r}.",

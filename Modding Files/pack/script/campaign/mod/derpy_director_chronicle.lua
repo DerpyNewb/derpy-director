@@ -171,7 +171,11 @@ function DC.sentence(e)
 			for n, k in ipairs(e.c) do names[n] = DC.faction(k) end
 			add("answered", {list = DC.join(names), i = I})
 		end
-		for _, p in ipairs(e.p or {}) do add("pact", {a = DC.faction(p[1]), b = DC.faction(p[2]), i = I}) end
+		-- A pact the Director funded carries each side's gold as its third field.
+		for _, p in ipairs(e.p or {}) do
+			local vals = {a = DC.faction(p[1]), b = DC.faction(p[2]), i = I, n = tostring(p[3])}
+			if p[3] then add("pact_chest", vals) else add("pact", vals) end
+		end
 		if e.g then add("grudge", {g = DC.faction(e.g), i = I}) end
 		if e.u then add("rebels", {r = R}) end
 		if e.pl then add("plague", {r = R}) end
@@ -272,6 +276,19 @@ local function measurer(p)
 	end
 end
 
+-- A line cut short: " ..." on the end, words dropped until it fits WITH it on. No measure (no probe
+-- yet) keeps every word.
+function DC.ellipsize(text, w, measure)
+	local words = {}
+	for word in string.gmatch(text, "%S+") do words[#words + 1] = word end
+	while #words > 1 do
+		local need = measure(bare(table.concat(words, " ") .. " ..."))
+		if not need or need <= w then break end
+		words[#words] = nil
+	end
+	return table.concat(words, " ") .. " ..."
+end
+
 -- The header: what kind of world this is, the old hatred, the ambitious. From the seed the model
 -- rolled at the first tick; a campaign that has none yet reads as "not yet known".
 function DC.draw_header(p)
@@ -302,7 +319,7 @@ function DC.draw_header(p)
 			local c = comp("hdr_text_" .. r .. "_" .. line, p)
 			local text = rows[r][line + 1]
 			-- A value longer than its slots ends in an ellipsis rather than mid-thought.
-			if line == n and rows[r][n + 2] then text = text .. " ..." end
+			if line == n and rows[r][n + 2] then text = DC.ellipsize(text, w, measure) end
 			-- What the temperament means, under its name, in CA's faded font colour: the game
 			-- ignores the cell's own font_m_colour, and markup is the route that draws.
 			if text and r == 1 and line > 1 then

@@ -137,6 +137,13 @@ column. The Director ships its own hub copy under a new tag `dr` (GUID prefixes 
   `[[col:ui_font_faded_grey_beige]]`, CA's own faded font colour. The header's first row has four
   lines, so the longest temperament description fits.
 - A last stand is recorded as its story's `m` field, not as a separate kind.
+- **Fonts.** The cells name CA's font categories, `header_24_bold` for the title, `header_14` for the
+  labels and `body_12` for the rest, not section 4's `brand_header` at 22 and `la_gioconda_uppercase`.
+  Those two are font names, which the shared emitter does not write; it writes categories, as the
+  Zharr Exchange's panel does.
+- **A pact the Director funded** carries each side's war chest as its third field, `{a, b, gold}`,
+  and reads "... against Clan Mors and raised 1250 gold each for the war." It is recorded only when
+  both sides were paid.
 
 **The final review** found two faults, and both are fixed with a test that failed first:
 
@@ -150,6 +157,19 @@ column. The Director ships its own hub copy under a new tag `dr` (GUID prefixes 
 
 A third finding, re-graded during the fix pass: the button's retry used `cm:callback`, a model
 timer, from code that depends on this machine's screen. It now uses `cm:real_callback`.
+
+The review's five minors were fixed afterwards, each with a test that failed first:
+
+- A runaway merge can spend the budget below the stance push's 5, and the story still said the
+  cast "turned against" the instigator. The push now marks the situation, and a cast it never
+  turned is recorded as no cast (harness: a merge from a budget of 62).
+- The war chest's gold was not recorded. It is now (above).
+- The header's " ..." was added after its line was measured, so a full line overflowed with it on
+  (428px in 424). `DC.ellipsize` drops words until the line fits with it (preview scene `crowded`).
+- The fonts' departure from section 4 is noted above.
+- `sync_director_repo.py` let any `.twui.xml` through. It now refuses the extension and publishes the
+  generated panels by name only; its self-test refuses CA's `army_banner.twui.xml`, which the lords
+  pack ships patched.
 
 **Offline.** `build_director.py --selftest` green; `mutate_director.py` 241 mutants, 0 survived,
 0 stale (12 of them aim at the war entries, one at the cleared news buffer). `preview_director.py --selftest` checks every sentence

@@ -1453,6 +1453,9 @@ end
 -- A story: the deed and what answered it, as the beats noted it on the situation. A deed nobody
 -- answered and nobody confederated over is not one.
 function derpy_director:news(sit, cast)
+	-- A cast the budget could not turn (a runaway merge can spend it first) turned against nobody,
+	-- and every beat after the stance push costs more than it, so nothing else was done either.
+	if not sit.turned then cast = {} end
 	if #cast == 0 and not sit.merge then return end
 	local c = {}
 	for i = 1, #cast do c[i] = cast[i] end
@@ -1769,6 +1772,7 @@ function derpy_director:respond(sit)
 		for i = 1, #cast do
 			self:beat_stance(cast[i], sit.instigator, STANCE_HOSTILE)
 		end
+		sit.turned = true
 	end
 
 	-- The coalition runs before the grudge: force is cheap and reversible, past_event costly and
@@ -1802,8 +1806,10 @@ function derpy_director:respond(sit)
 				if self:afford(PRICE.warchest) then
 					local gold = math.floor(WARCHEST * self:size_scale(sit.instigator))
 					if t.swing then gold = math.floor(gold * cm:random_number(150, 50) / 100) end
-					self:beat_warchest(pa, gold)
-					self:beat_warchest(pb, gold)
+					local paid_a = self:beat_warchest(pa, gold)
+					local paid_b = self:beat_warchest(pb, gold)
+					-- The Chronicle says what each side was given, so only when both were.
+					if paid_a and paid_b then sit.pacts[#sit.pacts][3] = gold end
 				end
 				if not pact_shielded and self:afford(PRICE.shield) then
 					pact_shielded = self:beat_shield(sit)

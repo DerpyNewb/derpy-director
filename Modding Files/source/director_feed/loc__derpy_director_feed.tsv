@@ -229,6 +229,7 @@ derpy_director_chronicle_deed_seizure	{i} seized a convoy belonging to {v}.	fals
 derpy_director_chronicle_deed_secession	{r} broke away from {i}.	false
 derpy_director_chronicle_answered	{list} turned against {i}.	false
 derpy_director_chronicle_pact	{a} and {b} signed a defensive alliance against {i}.	false
+derpy_director_chronicle_pact_chest	{a} and {b} signed a defensive alliance against {i} and raised {n} gold each for the war.	false
 derpy_director_chronicle_grudge	{g} will not forget it.	false
 derpy_director_chronicle_rebels	Rebels rose in {r}.	false
 derpy_director_chronicle_plague	Plague broke out in the ruins of {r}.	false

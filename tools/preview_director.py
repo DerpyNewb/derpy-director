@@ -84,7 +84,7 @@ def _hard_chronicle():
     """100 entries, oldest first: every kind in turn, each carrying every consequence it can."""
     a, b, c, d, e = F
     kinds = [
-        {"k": "sack", "i": a, "v": b, "r": R[0], "c": [c, d, e], "p": [[c, d], [c, e]], "g": c,
+        {"k": "sack", "i": a, "v": b, "r": R[0], "c": [c, d, e], "p": [[c, d, 12500], [c, e]], "g": c,
          "m": [d, b, "runaway"]},
         {"k": "raze", "i": a, "v": b, "r": R[1], "c": [c, d, e], "g": c, "pl": True},
         {"k": "conquest", "i": a, "v": b, "r": R[0], "c": [c, d, e], "p": [[c, d]], "u": 12,
@@ -137,6 +137,13 @@ SENTENCES = [
     ({"t": 42, "k": "runaway_pact", "i": "mors", "p": [["hirn", "zhuf"]]},
      "Karak Hirn and Zhufbar allied against Clan Mors."),
     ({"t": 43, "k": "nothing_known", "i": "mors"}, "nil"),
+    # A pact the Director funded says what each side was given.
+    ({"t": 45, "k": "sack", "i": "mors", "v": "azul", "r": "r_azul", "c": ["hirn", "zhuf"],
+      "p": [["hirn", "zhuf", 1250]]},
+     "Clan Mors sacked Karak Azul, a settlement of Karak Azul. "
+     "Karak Hirn and Zhufbar turned against Clan Mors. "
+     "Karak Hirn and Zhufbar signed a defensive alliance against Clan Mors and raised 1250 gold "
+     "each for the war."),
 ]
 
 
@@ -342,6 +349,8 @@ SCENES = {
                      '.. "," .. REAL_TIMERS)'),
     # A save from before the Chronicle: no chronicle, the old news buffer, no seed.
     "empty": ("old", 'ok("open", DC.show, true)'),
+    # More ambitious factions than the header's lines hold, so its last line ends in " ...".
+    "crowded": ("crowded", 'ok("open", DC.show, true)'),
     # Every fixture through DC.sentence, word for word, and a turn's heading.
     "sentences": ("hard", "for i, e in ipairs(SENTENCE_ENTRIES) do "
                           'print("S\\t" .. i .. "\\t" .. tostring(DC.sentence(e))) end '
@@ -354,7 +363,10 @@ def _saved(which):
         return {"derpy_director_news": [[1, "sack", "a", "b", "r", 2]]}
     return {"derpy_director_chronicle": _hard_chronicle(),
             "derpy_director_seed": {"temperament": "rising", "phase": 2, "hot": SC,
-                                    "ambitious": [F[0], F[1], F[2]]}}
+                                    # crowded: found by search, the list whose second line is
+                                    # fullest (416 of 424px) with a third still to come
+                                    "ambitious": [F[0]] * 5 if which == "crowded"
+                                    else [F[0], F[1], F[2]]}}
 
 
 def snapshot(scene):
@@ -477,6 +489,16 @@ def selftest():
     fails += ["reopen: " + e for e in errs]
     if len(counts) != 2 or counts[0] != counts[1] or counts[0] <= 0:
         fails.append("reopen: rows %r, not the same count twice" % counts)
+    # A value longer than its header lines ends in " ...", and that line still fits WITH it on
+    # (the final review: it used to be added after the line was measured).
+    from PIL import ImageFont
+    comps, _s, _c, _w, errs = snapshot("crowded")
+    fails += ["crowded: " + e for e in errs]
+    last = {c["name"]: c["text"] for c in comps}.get("hdr_text_3_%d" % U.HEADER_LINES[3]) or ""
+    need = ImageFont.truetype(FONT, 12).getlength(_bare(last))
+    if not last.endswith(" ...") or need > S["value_w"] - S["inset"] + 2:
+        fails.append("crowded: the header's last line is %.0fpx in %dpx: %r"
+                     % (need, S["value_w"] - S["inset"], last[-50:]))
     comps, _s, _c, writes, errs = snapshot("empty")
     fails += ["empty: " + e for e in errs] + ["empty: wrote %s" % w for w in writes]
     lines = [c for c in comps if c["name"].startswith("derpy_director_line_")]

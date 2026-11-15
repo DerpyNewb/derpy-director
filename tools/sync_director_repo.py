@@ -20,7 +20,8 @@ Regenerating the .twui.xml files needs gen_guilds_ui.py (CA's slider builder and
 derpy-great-guilds repository, as the Iron Court's repository does; the published files are what it wrote.
 
 NOTHING OF CA'S OR GW'S IS PUBLISHED: no .pack, no .loc, no game art, and nothing under Modding Files/reference/,
-where CA's scripting docs and shipped scripts live. The builder reads CA's tables from the player's own install, and
+where CA's scripting docs and shipped scripts live. A .twui.xml is published only when GENERATED_UI names it: the
+same folder holds CA's own panels that other packs ship patched. The builder reads CA's tables from the player's own install, and
 the self-test skips the two checks that need CA's files when they are absent. Nor is any file naming a Windows user
 profile. `refused()` checks every manifest entry, by path, extension and content, and the sync will not run while it
 reports anything.
@@ -78,7 +79,10 @@ HISTORY = ["HANDOFF_20260913_AI_GAPS_AND_COALITIONS.md", "HANDOFF_20260913_AI_CO
 REFERENCE = ["CAMPAIGN_AI.md", "DIPLOMACY.md"]
 
 REFUSED_EXT = (".png", ".gif", ".mp4", ".dds", ".jpg", ".jpeg", ".webp", ".tga", ".pack", ".bin", ".loc", ".anim",
-               ".wem", ".xlsx", ".json", ".npz", ".txt", ".html")
+               ".wem", ".xlsx", ".json", ".npz", ".txt", ".html", ".twui.xml")
+# The one exception to REFUSED_EXT: the panels gen_director_ui.py and sync_derpy_hub.py write. Named, because the
+# same folder holds CA's own panels that other packs ship patched.
+GENERATED_UI = {p for p in PACKED if p.endswith(".twui.xml")}
 PRIVATE = re.compile(r"[A-Za-z]:[\\/]+Users[\\/]+[^\\/\s]+", re.I)
 DECOMPILED = re.compile(r"^```c\s*$", re.M)
 
@@ -108,7 +112,8 @@ def refused(m, root=ROOT):
     """Every manifest entry that must never be published, with why."""
     bad = []
     for src, _dst in m:
-        if src.startswith("Modding Files/reference/") or src.lower().endswith(REFUSED_EXT):
+        if src.startswith("Modding Files/reference/") or (src.lower().endswith(REFUSED_EXT)
+                                                          and src not in GENERATED_UI):
             bad.append((src, "CA's file or docs, game art, a game binary or a data dump"))
             continue
         p = os.path.join(root, src)
@@ -138,7 +143,10 @@ def _selftest():
     for probe in ("Modding Files/Modpacks/derpy_director.pack", "Modding Files/pack/text/db/derpy_director_feed.loc",
                   "Modding Files/reference/ca_script_docs_wh3/campaign/episodic_scripting.html",
                   "Modding Files/reference/ca_scripts_wh3/campaign/main_warhammer/crisis/crisis_waaagh.lua",
-                  ".skilltree_cache/campaign_cultural_relations.json"):
+                  ".skilltree_cache/campaign_cultural_relations.json",
+                  # CA's own panel, which the lords pack ships patched: a .twui.xml is published by
+                  # name only, never because of its extension
+                  "Modding Files/pack/ui/campaign ui/army_banner.twui.xml"):
         assert refused([(probe, probe)]), "refused() let %s through" % probe
     with tempfile.TemporaryDirectory() as td:
         with open(os.path.join(td, "a.lua"), "w") as fh:

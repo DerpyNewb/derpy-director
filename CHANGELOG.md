@@ -7,7 +7,9 @@
   shared button hub when another of Derpy's hub mods is installed.
 - A war is listed with its cause when the Chronicle already records one: a sack, a betrayal, a seized convoy and the
   rest, or fear of a runaway power. Wars with no recorded cause are left out.
-- The defensive alliance line now says who it is against.
+- The defensive alliance line now says who it is against, and how much gold each side raised for the war when the
+  alliance was funded.
+- A story no longer says neighbours turned against a faction when the Director had no budget left to turn them.
 - The Chronicle replaces the old 50-entry news buffer, which is cleared from a save the first time the Chronicle
   writes. It holds the newest 100 entries.
 

@@ -2717,7 +2717,12 @@ def _selftest_chronicle():
     e = e[0]
     assert (e["t"], e["k"], e["i"], e["v"], e["r"]) == ("1", "sack", "sacker", "victim",
                                                          "r_victim"), e
-    assert e["c"] == "{hold_a,hold_b}" and e["p"] == "{{hold_a,hold_b}}" and e["g"] == "hold_a", e
+    # The pact carries the war chest its pair was each paid (spec 3; the final review found it
+    # missing): the same gold treasury_mod was given, once per side.
+    paid = [x for x in c if x[0] == "treasury_mod"]
+    assert [x[1] for x in paid] == ["hold_a", "hold_b"] and paid[0][2] == paid[1][2], paid
+    assert e["c"] == "{hold_a,hold_b}" and e["g"] == "hold_a", e
+    assert e["p"] == "{{hold_a,hold_b,%s}}" % paid[0][2], (e, paid)
     assert "u" not in e and "pl" not in e and "m" not in e, e
     c, _ = run_lua(world, events=deed("CharacterSackedSettlement") +
                    [{"event": "Eval", "turn": 1, "code": CHRON_TYPES}],
@@ -2769,6 +2774,16 @@ def _selftest_chronicle():
                regions_spec=MERGE_REGIONS)
     story = [x for x in _chron(c) if x["k"] == "sack"]
     assert story and story[0]["m"] == "{kin_a,vic,runaway}", _chron(c)
+    # The merge's 60 leaves 2, too little to turn the cast (the roll checks the budget before the
+    # merge spends it): the merge is the story, and nobody is said to have turned against anyone.
+    # The final review, 2026-11-15.
+    c, _ = run(rw, events=[{"event": "SetBudget", "n": 62, "turn": 12},
+                           {"event": "CharacterSackedSettlement", "instigator": "big",
+                            "victim": "vic", "region": "r_vic", "turn": 12}, dump(12)],
+               regions_spec=MERGE_REGIONS)
+    assert outs(c, "budget 2 cannot afford 5"), c
+    story = [x for x in _chron(c) if x["k"] == "sack"]
+    assert story and story[0]["m"] == "{kin_a,vic,runaway}" and story[0]["c"] == "{}", _chron(c)
     c, _ = run(_merge_world(), events=_merge_conq() + [dump(12)], regions_spec=MERGE_REGIONS,
                seed=100)
     assert outs(c, "merge kin_big absorbs vic (last_stand)"), c

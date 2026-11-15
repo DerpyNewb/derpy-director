@@ -91,7 +91,7 @@ The generated files are committed so the repository reads without running anythi
   pass every test and then fail in game.
 - **Every rule, broken on purpose.** `py tools/mutate_director.py` breaks the script one rule at a time (a guard
   removed, a limit lifted, a sort dropped, a key misspelt), runs the self-test against each break, and restores the
-  file. A break the self-test does not notice is a missing test. The current run: 240 breaks, all caught.
+  file. A break the self-test does not notice is a missing test. The current run: 243 breaks, all caught.
 - **The Chronicle, drawn offline.** `py tools/preview_director.py --selftest` runs the panel's script against fake
   components built from its own `.twui.xml` files and checks every sentence word for word, the turn headings and
   rules, the indents and the header. Without `--selftest` it draws the panel at its hardest case (100 entries, the
