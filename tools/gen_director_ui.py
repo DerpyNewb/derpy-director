@@ -160,6 +160,13 @@ CHRONICLE_LOC = {
     "war_seizure": "{i} declared war on {v}, which had seized a convoy belonging to {x}.",
     "war_secession": "{i} declared war on {v} after {r} broke away from it.",
     "war_runaway": "{i} declared war on {v}, fearing its power.",
+    "empire_great": "{i} set out to become a great power.",
+    "empire_lesser": "{i} set out to build an empire.",
+    "empire_fade": "The ambitions of {i} came to nothing.",
+    "empire_goal_great": "{i} now rules {n} settlements, a great power the world cannot ignore.",
+    "empire_goal_lesser": "{i} now rules {n} settlements, an empire in its own right.",
+    "empire_merge": "{v} joined {i} in a confederation.",
+    "empire_peace": "{i} made peace with {v} to turn its armies elsewhere.",
 }
 MODEL = os.path.join(ROOT, "Modding Files", "pack", "script", "campaign", "mod", "derpy_director.lua")
 

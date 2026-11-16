@@ -46,6 +46,7 @@ local MAX_HOPS = 3
 local WAR_PENALTY = 0.25
 
 local STANCE_HOSTILE = "CAI_STRATEGIC_STANCE_VERY_UNFRIENDLY"
+local STANCE_FRIENDLY = "CAI_STRATEGIC_STANCE_FRIENDLY"
 
 -- How wrong the deed was: how much the aggressor's culture already hates the victim's. Same
 -- culture is kin-slaying. The thresholds are guesses; the shape is measured.
@@ -159,6 +160,7 @@ local FEED = {
 	temper_wild = {index = 7802, key = "temper_wild"},
 	blood = {index = 7900, key = "blood"},
 	betrayal = {index = 8000, key = "betrayal"},
+	empire_rise = {index = 8100, key = "empire_rise"},
 }
 
 -- Situations told ONCE, with their own record, after the beats: the pact and grudge records say
@@ -226,6 +228,10 @@ local HOT_MULT = 2.0
 local HOT_FLOOR = -25
 local AMBITIOUS_MULT = 1.5
 local AMBITIOUS_COUNT = 3
+-- Since 2026-11-15 the ambitious factions are the campaign's empires (the EMPIRES section): no two
+-- capitals within this many region hops, so they do not block each other and more of the map gets
+-- a rival.
+local EMPIRE_SPREAD_HOPS = 6
 -- Choosing what to answer. Every situation is answered with a CHANCE, so the turn's money is not
 -- spent on whoever moved first: outrage against the kin-slaying maximum, times PARTY_WEIGHT when the
 -- player is one of the two parties, times how full the budget is (never below BUDGET_FLOOR, so a
@@ -368,20 +374,28 @@ function derpy_director:roll_hot_grudge()
 	return pairs_list[cm:random_number(#pairs_list, 1)]
 end
 
+-- The empires: drawn at random from the factions a player could have picked, then from the rest
+-- only if too few are left, each capital clear of the others'. Most settlements first, so the
+-- first is the great power.
 function derpy_director:roll_ambitious()
-	local pool = {}
+	local strict, loose = {}, {}
 	for _, f in model_pairs(cm:model():world():faction_list()) do
-		if not f:is_null_interface() and not f:is_dead() and not f:is_rebel() and not f:is_human()
-				and f:region_list():num_items() >= 1 then
-			pool[#pool + 1] = f:name()
+		if self:empire_candidate(f, true) then
+			strict[#strict + 1] = f:name()
+		elseif self:empire_candidate(f, false) then
+			loose[#loose + 1] = f:name()
 		end
 	end
-	table.sort(pool)
-	local out_list = {}
-	for _ = 1, math.min(AMBITIOUS_COUNT, #pool) do
-		out_list[#out_list + 1] = table.remove(pool, cm:random_number(#pool, 1))
+	table.sort(strict)
+	table.sort(loose)
+	local chosen = {}
+	for _, pool in ipairs({strict, loose}) do
+		while #chosen < AMBITIOUS_COUNT and #pool > 0 do
+			local key = table.remove(pool, cm:random_number(#pool, 1))
+			if self:spread_ok(key, chosen) then chosen[#chosen + 1] = key end
+		end
 	end
-	return out_list
+	return self:by_size(chosen)
 end
 
 -- The temperament, named to every player at the start: variety a player cannot see is no variety.
@@ -409,6 +423,17 @@ function derpy_director:roll_seed()
 	cm:set_saved_value("derpy_director_seed", s)
 	log(string.format("seed rolled: temperament=%s phase=%d hot=%s ambitious=%s", name, s.phase,
 		table.concat(s.hot, "/"), table.concat(s.ambitious, ",")))
+	-- The empires set out: the first is the great power, saved now so the first turn start does not
+	-- re-rank them (a neighbour's town taken on turn 1 tied two of them on 2026-11-15, and the title
+	-- moved while the Chronicle still named the first).
+	if self:setting("empires") then
+		local st = self:empires()
+		st.great = s.ambitious[1]
+		cm:set_saved_value("derpy_director_empires", st)
+		for i, key in ipairs(s.ambitious) do
+			self:chronicle({t = cm:model():turn_number(), k = "empire", i = key, n = i == 1 and 1 or 2})
+		end
+	end
 	self:announce(name)
 	return s
 end
@@ -797,19 +822,24 @@ function derpy_director:tier_for(ratio, leader_regions, current)
 	return tier
 end
 
+-- The leader is the largest faction the empires' shelter does not cover; the runner-up is the
+-- largest of all the rest, sheltered or not, so the ratio stays honest for everyone else.
 function derpy_director:measure()
-	local leader, best, second = nil, 0, 0
+	local all = {}
 	for _, f in model_pairs(cm:model():world():faction_list()) do
 		if not f:is_null_interface() and not f:is_dead() and not f:is_rebel() then
-			local n = f:region_list():num_items()
-			if n > best then
-				leader, second, best = f, best, n
-			elseif n > second then
-				second = n
-			end
+			all[#all + 1] = {f = f, n = f:region_list():num_items()}
 		end
 	end
-	if not leader or second == 0 then return nil end
+	local leader, best, second = nil, 0, 0
+	for _, e in ipairs(all) do
+		if e.n > best and not self:shelters(e.f:name()) then leader, best = e.f, e.n end
+	end
+	if not leader then return nil end
+	for _, e in ipairs(all) do
+		if e.n > second and e.f:name() ~= leader:name() then second = e.n end
+	end
+	if second == 0 then return nil end
 	return leader, best, second, best / second
 end
 
@@ -1029,6 +1059,660 @@ function derpy_director:is_invader(f)
 	return false
 end
 
+-- The confederations made this turn, by any route; merge_first reads and writes it.
+local function merge_count(turn)
+	if cm:get_saved_value("derpy_director_merge_turn") ~= turn then return 0 end
+	return cm:get_saved_value("derpy_director_merge_count") or 0
+end
+
+-- EMPIRES (2026-11-15). Phase 4 of the design: each campaign the Director grows three computer
+-- empires, a great power and two lesser ones, on a schedule. Design:
+-- docs/superpowers/specs/2026-11-15-director-empires-design.md.
+
+-- A faction that could be an empire: alive, a computer faction's, not a rebel, an endgame invader
+-- or a vassal, holding land of a race that can hold land. strict also asks can_be_human(), CA's own
+-- "is this a major faction" test (campaign/mod/battle_logging.lua:75).
+function derpy_director:empire_candidate(f, strict)
+	if not f or f:is_null_interface() or f:is_dead() or f:is_human() or f:is_rebel() then
+		return false
+	end
+	if f:is_vassal() or self:is_invader(f) then return false end
+	if f:region_list():num_items() < 1 or not f:is_allowed_to_capture_territory() then return false end
+	if strict and not f:can_be_human() then return false end
+	return true
+end
+
+-- Whether key's capital is clear of every chosen empire's by EMPIRE_SPREAD_HOPS. Hops run both
+-- ways, so one reach from the candidate answers for every pair. No capital, no empire.
+function derpy_director:spread_ok(key, chosen)
+	local f = cm:get_faction(key)
+	local home = f and not f:is_null_interface() and f:home_region()
+	if not home or home:is_null_interface() then return false end
+	local reach = self:within_reach(home:name(), EMPIRE_SPREAD_HOPS)
+	for _, k in ipairs(chosen) do
+		local o = cm:get_faction(k)
+		local oh = o and not o:is_null_interface() and o:home_region()
+		if oh and not oh:is_null_interface() and reach[oh:name()] then return false end
+	end
+	return true
+end
+
+-- Keys sorted most settlements first, ties by key, in place.
+function derpy_director:by_size(keys)
+	local n = {}
+	for _, k in ipairs(keys) do
+		local f = cm:get_faction(k)
+		n[k] = (f and not f:is_null_interface()) and f:region_list():num_items() or 0
+	end
+	table.sort(keys, function(a, b)
+		if n[a] ~= n[b] then return n[a] > n[b] end
+		return a < b
+	end)
+	return keys
+end
+
+-- The goals are set for vanilla Immortal Empires, whose region list counts this many regions in
+-- game (measured 2026-11-15; campaign_map_regions holds 644 rows for the map, so the DB count is
+-- not the one to use). A smaller map scales every goal down.
+local IE_REGIONS = 572
+-- The schedule: nothing is expected before EMPIRE_ZERO_TURN, the goal by the goal-turn setting.
+-- Far behind is under EMPIRE_FAR of it, from EMPIRE_FAR_FROM on. A check, on EMPIRE_CHECK_FIRST
+-- and every EMPIRE_CHECK_EVERY after, replaces an empire under EMPIRE_STALLED of it.
+local EMPIRE_ZERO_TURN = 10
+local EMPIRE_FAR, EMPIRE_FAR_FROM = 0.6, 25
+local EMPIRE_STALLED = 0.5
+local EMPIRE_CHECK_FIRST, EMPIRE_CHECK_EVERY = 20, 10
+-- Settlement counts kept, one per check: the oldest is the baseline a replacement's growth is
+-- measured from, so two make it the last 20 turns.
+local EMPIRE_SNAPS = 2
+
+local function alive(key)
+	local f = key and cm:get_faction(key)
+	if not f or f:is_null_interface() or f:is_dead() then return nil end
+	return f
+end
+
+-- Every strict candidate's settlement count, now.
+function derpy_director:empire_snapshot()
+	local n = {}
+	for _, f in model_pairs(cm:model():world():faction_list()) do
+		if self:empire_candidate(f, true) then n[f:name()] = f:region_list():num_items() end
+	end
+	return {t = cm:model():turn_number(), n = n}
+end
+
+-- Saved as one table. Missing, as in a save from before 2026-11-15, it is built from the seed's
+-- ambitious factions; empire_turn saves it.
+function derpy_director:empires()
+	local st = cm:get_saved_value("derpy_director_empires")
+	if type(st) ~= "table" then st = {} end
+	for _, field in ipairs({"graduated", "chosen", "help", "merged", "cheat", "temper"}) do
+		if type(st[field]) ~= "table" then st[field] = {} end
+	end
+	local s = self:seed()
+	for _, k in ipairs(s and s.ambitious or {}) do
+		if not st.chosen[k] then st.chosen[k] = cm:model():turn_number() end
+	end
+	if type(st.snaps) ~= "table" or #st.snaps == 0 then st.snaps = {self:empire_snapshot()} end
+	return st
+end
+
+function derpy_director:map_scale()
+	return cm:model():world():region_manager():region_list():num_items() / IE_REGIONS
+end
+
+function derpy_director:is_great(key, st)
+	if st.great then return st.great == key end
+	local s = self:seed()
+	return s and s.ambitious and s.ambitious[1] == key or false
+end
+
+function derpy_director:empire_goal(key, st)
+	st = st or self:empires()
+	local setting = self:setting(self:is_great(key, st) and "empire_great_goal" or "empire_lesser_goal")
+	return math.max(1, math.floor(setting * self:map_scale() + 0.5))
+end
+
+function derpy_director:expected(key, turn, st)
+	local span = self:setting("empire_goal_turn") - EMPIRE_ZERO_TURN
+	local share = (turn - EMPIRE_ZERO_TURN) / span
+	if share < 0 then share = 0 elseif share > 1 then share = 1 end
+	return self:empire_goal(key, st) * share
+end
+
+-- "graduated", "ahead", "behind" or "far"; nil for a faction that is not a living empire, or with
+-- the Empires switch off.
+function derpy_director:empire_band(key, turn)
+	if not self:setting("empires") or not self:is_ambitious(key) then return nil end
+	local f = alive(key)
+	if not f then return nil end
+	local st = self:empires()
+	if st.graduated[key] then return "graduated" end
+	local n, e = f:region_list():num_items(), self:expected(key, turn, st)
+	if n > e then return "ahead" end
+	if turn >= EMPIRE_FAR_FROM and n < EMPIRE_FAR * e then return "far" end
+	return "behind"
+end
+
+-- Shelter: an empire at or behind its schedule is not named the runaway leader, and the Director
+-- funds nothing against it. Ahead of schedule or graduated, the world answers it in full.
+function derpy_director:shelters(key)
+	local band = self:empire_band(key, cm:model():turn_number())
+	return band == "behind" or band == "far"
+end
+
+-- A deed against a player is never sheltered.
+function derpy_director:sheltered(sit)
+	return self:shelters(sit.instigator) and not is_human_key(sit.victim)
+end
+
+-- The great power: a graduate keeps the title, else the living empire with most settlements
+-- (ties by key). It goes first in the seed's list, which the Chronicle's header reads.
+function derpy_director:assign_roles(st)
+	local s = self:seed()
+	if not s or not s.ambitious then return end
+	if not (st.great and st.graduated[st.great] and self:is_ambitious(st.great)) then
+		local best, best_n
+		for _, k in ipairs(s.ambitious) do
+			local f = alive(k)
+			if f and not st.graduated[k] then
+				local n = f:region_list():num_items()
+				if not best or n > best_n or (n == best_n and k < best) then best, best_n = k, n end
+			end
+		end
+		st.great = best
+	end
+	if not st.great then return end
+	local order = {st.great}
+	for _, k in ipairs(s.ambitious) do
+		if k ~= st.great then order[#order + 1] = k end
+	end
+	s.ambitious = order
+	cm:set_saved_value("derpy_director_seed", s)
+end
+
+-- Reaching the goal is for good. The great power's is told to every player, at its capital.
+function derpy_director:graduate(key, st, turn, n)
+	st.graduated[key] = turn
+	local great = self:is_great(key, st)
+	self:chronicle({t = turn, k = "empire_goal", i = key, n = n, g = great and 1 or 2})
+	log(string.format("empire %s reached its goal with %d settlements", key, n))
+	if not great then return end
+	local rec = self:feed_record("empire_rise")
+	local f = cm:get_faction(key)
+	local x, y = self:map_point(f:home_region())
+	if not (rec and x and y) then return end
+	for _, h in ipairs(cm:get_human_factions()) do
+		cm:show_message_event_located(h, rec.title, rec.body, rec.tail, x, y, false, rec.index)
+		log(string.format("feed empire_rise index=%d to=%s", rec.index, h))
+	end
+end
+
+-- The candidate that grew most since the oldest snapshot (ties: more settlements, then key), never
+-- an empire before, its capital clear of others'. Players' choices first, then the rest.
+function derpy_director:empire_grower(st, others)
+	local base = st.snaps[1] and st.snaps[1].n or {}
+	for _, strict in ipairs({true, false}) do
+		local pool = {}
+		for _, f in model_pairs(cm:model():world():faction_list()) do
+			local k = f:name()
+			if not st.chosen[k] and self:empire_candidate(f, true) == strict
+				and self:empire_candidate(f, false) then
+				local n = f:region_list():num_items()
+				pool[#pool + 1] = {k = k, n = n, gain = n - (base[k] or 0)}
+			end
+		end
+		table.sort(pool, function(a, b)
+			if a.gain ~= b.gain then return a.gain > b.gain end
+			if a.n ~= b.n then return a.n > b.n end
+			return a.k < b.k
+		end)
+		for _, c in ipairs(pool) do
+			if self:spread_ok(c.k, others) then return c.k end
+		end
+	end
+	return nil
+end
+
+-- A dead empire fades; one under EMPIRE_STALLED of its schedule fades only if a grower takes its
+-- place. A graduate is never replaced. Empty places are filled after.
+function derpy_director:empire_check(st, turn)
+	local s = self:seed()
+	local keep, stalled, fades, picks = {}, {}, {}, {}
+	for _, k in ipairs(s.ambitious) do
+		local f = alive(k)
+		if st.graduated[k] then
+			keep[#keep + 1] = k
+		elseif not f then
+			fades[#fades + 1] = k
+		else
+			keep[#keep + 1] = k
+			if f:region_list():num_items() < EMPIRE_STALLED * self:expected(k, turn, st) then
+				stalled[#stalled + 1] = k
+			end
+		end
+	end
+	for _, k in ipairs(stalled) do
+		local others = {}
+		for _, o in ipairs(keep) do
+			if o ~= k then others[#others + 1] = o end
+		end
+		local pick = self:empire_grower(st, others)
+		if pick then
+			for i, o in ipairs(keep) do
+				if o == k then keep[i] = pick end
+			end
+			fades[#fades + 1] = k
+			picks[#picks + 1] = pick
+			st.chosen[pick] = turn
+		end
+	end
+	while #keep < AMBITIOUS_COUNT do
+		local pick = self:empire_grower(st, keep)
+		if not pick then break end
+		keep[#keep + 1] = pick
+		picks[#picks + 1] = pick
+		st.chosen[pick] = turn
+	end
+	s.ambitious = keep
+	cm:set_saved_value("derpy_director_seed", s)
+	self:assign_roles(st)
+	for _, k in ipairs(fades) do
+		self:chronicle({t = turn, k = "empire_fade", i = k})
+		log("empire " .. k .. " faded")
+	end
+	for _, k in ipairs(picks) do
+		self:chronicle({t = turn, k = "empire", i = k, n = self:is_great(k, st) and 1 or 2})
+		log("empire " .. k .. " rises")
+	end
+	self:promote(st, turn)
+	st.snaps[#st.snaps + 1] = self:empire_snapshot()
+	while #st.snaps > EMPIRE_SNAPS do table.remove(st.snaps, 1) end
+end
+
+-- Spec 15.2: the title follows the winner. The largest faction that could be an empire takes it
+-- from a great power short of its goal: an empire, a graduate among them, or a newcomer never
+-- chosen before that is spread from the two empires that stay and takes the weakest lesser
+-- empire's place. Never a measured runaway or an invader. Ties change nothing.
+function derpy_director:promote(st, turn)
+	local s = self:seed()
+	local old = st.great
+	local great = old and alive(old)
+	if not great or st.graduated[old] then return nil end
+	local blocked = {}
+	for _, k in ipairs(self:runaway_keys(1)) do blocked[k] = true end
+	local floor_n = great:region_list():num_items()
+	local pool = {}
+	for _, f in model_pairs(cm:model():world():faction_list()) do
+		local k = f:name()
+		local n = f:region_list():num_items()
+		if n > floor_n and not blocked[k] and not f:is_dead() and (self:is_ambitious(k)
+			or (not st.chosen[k] and self:empire_candidate(f, true))) then
+			pool[#pool + 1] = {k = k, n = n}
+		end
+	end
+	table.sort(pool, function(a, b)
+		if a.n ~= b.n then return a.n > b.n end
+		return a.k < b.k
+	end)
+	-- The weakest lesser empire: the place a newcomer takes.
+	local lesser, drop, drop_n = {}, nil, nil
+	for _, k in ipairs(s.ambitious) do
+		if k ~= old then
+			lesser[#lesser + 1] = k
+			local f = alive(k)
+			local n = f and f:region_list():num_items() or -1
+			if not drop or n < drop_n or (n == drop_n and k > drop) then drop, drop_n = k, n end
+		end
+	end
+	if #s.ambitious < AMBITIOUS_COUNT then drop = nil end
+	for _, c in ipairs(pool) do
+		local stays = {old}
+		for _, k in ipairs(lesser) do
+			if k ~= drop and k ~= c.k then stays[#stays + 1] = k end
+		end
+		if self:is_ambitious(c.k) or self:spread_ok(c.k, stays) then
+			local newcomer = not self:is_ambitious(c.k)
+			local order = {c.k}
+			for _, k in ipairs(stays) do order[#order + 1] = k end
+			if not newcomer and drop and drop ~= c.k then order[#order + 1] = drop end
+			s.ambitious = order
+			cm:set_saved_value("derpy_director_seed", s)
+			st.great = c.k
+			st.graduated[c.k] = nil
+			if newcomer then
+				st.chosen[c.k] = turn
+				if drop then
+					self:chronicle({t = turn, k = "empire_fade", i = drop})
+					log("empire " .. drop .. " faded")
+				end
+			end
+			self:chronicle({t = turn, k = "empire", i = c.k, n = 1})
+			log(string.format("empire %s takes the title from %s (%d settlements)", c.k, old, c.n))
+			return c.k
+		end
+	end
+	return nil
+end
+
+-- Spec 15.3: a passive race's great power takes its race's endgame personality, the call CA's
+-- endgame crises make (crisis_grudge_too_far.lua). Once per faction, and for good: no call reads a
+-- personality back, so it could not be restored.
+local TEMPER = {
+	wh2_main_sc_skv_skaven = "wh3_combi_skaven_endgame",
+	wh_main_sc_dwf_dwarfs = "wh3_combi_dwarf_endgame",
+	wh_main_sc_emp_empire = "wh3_combi_empire_endgame",
+	wh_main_sc_vmp_vampire_counts = "wh3_combi_vampire_endgame",
+	wh_dlc05_sc_wef_wood_elves = "wh3_combi_woodelf_endgame",
+	wh2_dlc09_sc_tmb_tomb_kings = "wh3_combi_tombking_endgame",
+}
+
+function derpy_director:temper(st, turn)
+	local k = st.great
+	if not k or st.temper[k] then return end
+	local f = alive(k)
+	local p = f and TEMPER[f:subculture()]
+	if not p then return end
+	st.temper[k] = turn
+	cm:force_change_cai_faction_personality(k, p)
+	log(string.format("temper %s -> %s turn %d", k, p, turn))
+end
+
+-- Spec 16.1: CA's own lever for a rival it builds up (wh3_campaign_ai.lua raises Bhashiva's
+-- Western Provinces to 210). Measured live 2026-11-15: (f, true, X) sets the total potential to X
+-- and (f, false, 0) restores the game's own value, which ran 350 to 555 for majors at turn 99.
+-- Held while the faction holds the title, handed back when the title moves or the switch goes off.
+local GREAT_POTENTIAL = 750
+
+function derpy_director:release_potential(st)
+	local old = st.potential and alive(st.potential)
+	if old then
+		cm:faction_set_total_potential_override_value(old, false, 0)
+		log("potential released on " .. st.potential)
+	end
+	st.potential = nil
+end
+
+function derpy_director:pace(st)
+	if st.potential == st.great then return end
+	self:release_potential(st)
+	local f = st.great and alive(st.great)
+	if not f then return end
+	cm:faction_set_total_potential_override_value(f, true, GREAT_POTENTIAL)
+	st.potential = st.great
+	log(string.format("potential %d on %s", GREAT_POTENTIAL, st.great))
+end
+
+-- Spec 16.2: an empire storms what it besieges once its army is SIEGE_ODDS times the
+-- garrison's, as CA's turn-one openings order (wh3_campaign_ai.lua:451), instead of sitting the
+-- siege out. Autoresolve still decides it. Never a player's town. Every empire, and free
+-- (2026-11-16): soak 3 turned 6 of 9 presses into captures and left 3 unpressed on an empty budget.
+local SIEGE_ODDS = 1.5
+
+function derpy_director:press_siege(character, r)
+	if not self:setting("empires") or not character or character:is_null_interface() then return false end
+	local f = character:faction()
+	if not f or f:is_null_interface() or f:is_human() then return false end
+	if not self:is_ambitious(f:name()) then return false end
+	local owner = r:owning_faction()
+	if not owner or owner:is_null_interface() or owner:is_human() then return false end
+	if not character:has_military_force() then return false end
+	local mine = character:military_force():strength()
+	local g = r:garrison_residence()
+	local army = g and not g:is_null_interface() and g:army()
+	local theirs = (army and not army:is_null_interface()) and army:strength() or 0
+	if mine < SIEGE_ODDS * theirs then
+		log(string.format("siege of %s held: %s %.0f against %.0f", r:name(), f:name(), mine, theirs))
+		return false
+	end
+	cm:attack_region(cm:char_lookup_str(character), r:name())
+	log(string.format("siege of %s pressed: %s %.0f against %.0f", r:name(), f:name(), mine, theirs))
+	return true
+end
+
+-- THE LEVERS. Every HELP_EVERY turns for an empire at or behind its schedule, each priced from the
+-- one budget. Never with, against or about a player, and never against another empire.
+-- No war target: the payload builder's war_coordination_target returned false for every shape tried
+-- on two AI factions at war (2026-11-15), so there is no script route to aim an AI at a town.
+local HELP_EVERY = 3
+local EMPIRE_MERGE_EVERY = 10
+local PEACE_DEAL = "diplomatic_option_peace"
+
+-- Each settlement next to f's land and the computer faction holding it, once each, weakest
+-- holder first (fewest settlements, then the region key).
+function derpy_director:borders(f)
+	local seen, found = {}, {}
+	for _, r in model_pairs(f:region_list()) do
+		for _, adj in model_pairs(r:adjacent_region_list()) do
+			local o = adj:owning_faction()
+			if not seen[adj:name()] and o and not o:is_null_interface() and not o:is_dead()
+				and not o:is_human() and o:name() ~= f:name() and not self:is_ambitious(o:name()) then
+				seen[adj:name()] = true
+				found[#found + 1] = {r = adj:name(), o = o, n = o:region_list():num_items()}
+			end
+		end
+	end
+	table.sort(found, function(a, b)
+		if a.n ~= b.n then return a.n < b.n end
+		return a.r < b.r
+	end)
+	return found
+end
+
+-- The weakest enemy next door, if it is fighting one: the war it can win, left for it to win.
+function derpy_director:empire_front(key)
+	local f = alive(key)
+	if not f then return nil end
+	for _, b in ipairs(self:borders(f)) do
+		if f:at_war_with(b.o) then return b.o:name() end
+	end
+	return nil
+end
+
+-- With no war to point: the weakest neighbour it is not bound to, nor could later absorb.
+function derpy_director:empire_stance(key)
+	local f = alive(key)
+	if not f then return nil end
+	for _, b in ipairs(self:borders(f)) do
+		local o = b.o
+		if not f:at_war_with(o) and not f:defensive_allies_with(o) and not f:military_allies_with(o)
+			and not f:is_vassal_of(o) and not o:is_vassal_of(f) and o:subculture() ~= f:subculture() then
+			return o:name()
+		end
+	end
+	return nil
+end
+
+-- Far behind: peace with the weakest enemy stronger than it, so it turns on the war it can win.
+function derpy_director:empire_peace(key, skip_key)
+	local f = alive(key)
+	if not f then return nil end
+	local n = f:region_list():num_items()
+	local foes = {}
+	for _, o in model_pairs(f:factions_at_war_with()) do
+		if not o:is_null_interface() and not o:is_dead() and not o:is_human() and o:name() ~= skip_key
+			and o:region_list():num_items() > n then
+			foes[#foes + 1] = {k = o:name(), n = o:region_list():num_items()}
+		end
+	end
+	table.sort(foes, function(a, b)
+		if a.n ~= b.n then return a.n < b.n end
+		return a.k < b.k
+	end)
+	if #foes == 0 then return nil end
+	local foe = foes[1].k
+	local sa, sb, oa, ob = self:beat_ask(key, foe, PEACE_DEAL, "peace ask")
+	if not (oa and ob and sa and sb and sa + sb > 0) or not self:afford(PRICE.force) then return nil end
+	cm:force_make_peace(key, foe)
+	log(string.format("peace %s + %s", key, foe))
+	return foe
+end
+
+-- Far behind: a weaker kin it has met folds in, by the merge route's own rules, one every
+-- EMPIRE_MERGE_EVERY turns, through merge_first like every other merge.
+function derpy_director:empire_merge(key, st, turn)
+	if turn - (st.merged[key] or -99) < EMPIRE_MERGE_EVERY then return nil end
+	local f = alive(key)
+	if not f then return nil end
+	local merged = self:merge_first(key, function()
+		local n = f:region_list():num_items()
+		local kin = {}
+		for _, m in model_pairs(f:factions_met()) do
+			local mn = m:region_list():num_items()
+			if m:subculture() == f:subculture() and mn < n and not self:is_ambitious(m:name()) then
+				kin[#kin + 1] = {k = m:name(), n = mn}
+			end
+		end
+		table.sort(kin, function(a, b)
+			if a.n ~= b.n then return a.n < b.n end
+			return a.k < b.k
+		end)
+		local found = {}
+		for i, c in ipairs(kin) do found[i] = {key, c.k} end
+		return found
+	end, nil, "empire")
+	if not merged then return nil end
+	st.merged[key] = turn
+	self:chronicle({t = turn, k = "empire_merge", i = key, v = merged[2]})
+	return merged[2]
+end
+
+-- The great power's back: its strongest AI neighbour it is not at war with, other than skip_key.
+function derpy_director:empire_friend(key, skip_key)
+	local f = alive(key)
+	if not f then return nil end
+	local b = self:borders(f)
+	for i = #b, 1, -1 do
+		local o = b[i].o
+		if o:name() ~= skip_key and not f:at_war_with(o) then return o:name() end
+	end
+	return nil
+end
+
+function derpy_director:help(key, band, st, turn)
+	st.help[key] = turn
+	log(string.format("empire %s helped (%s) turn %d", key, band, turn))
+	local great = self:is_great(key, st)
+	-- With no war next door, a hostile stance toward the weakest neighbour; the AI decides the rest.
+	-- The great power is also turned friendly toward its strongest, so it opens one front at a time.
+	-- One beat, one price.
+	local front = self:empire_front(key)
+	if not front then
+		local n = self:empire_stance(key)
+		local friend = great and self:empire_friend(key, n) or nil
+		if (n or friend) and self:afford(PRICE.mood) then
+			if n then self:beat_stance(key, n, STANCE_HOSTILE) end
+			if friend then self:beat_stance(key, friend, STANCE_FRIENDLY) end
+		end
+	end
+	-- Peace and kin: far behind, or for the great power as soon as it is behind (spec 15.1).
+	if band ~= "far" and not great then return end
+	local foe = self:empire_peace(key, front)
+	if foe then self:chronicle({t = turn, k = "empire_peace", i = key, v = foe}) end
+	self:empire_merge(key, st, turn)
+end
+
+-- THE CHEATS (spec 6b), only when the player picks them in MCT: multiplayer falls back to the
+-- default, "natural". Only for an empire far behind, once every CHEAT_EVERY turns. Not charged to
+-- the budget and not chronicled, since the player chose them.
+-- 5, not 10 (2026-11-16): soak 4's great power gained about 10 settlements every 10 turns against a
+-- schedule rising 12.5, with the cheats firing every 10.
+local CHEAT_EVERY = 5
+local EMPIRE_GOLD = 5000
+
+function derpy_director:empire_cheats(key, st, turn)
+	local level = self:setting("empire_help")
+	if level ~= "generous" and level ~= "relentless" then return end
+	st.cheat[key] = turn
+	cm:treasury_mod(key, EMPIRE_GOLD)
+	log(string.format("empire %s cheat turn %d: %s, %d gold", key, turn, level, EMPIRE_GOLD))
+	if level ~= "relentless" then return end
+	self:cheat_army(key)
+	self:cheat_ruin(key)
+end
+
+-- A copy of its largest army at its capital: the same units without the general, item 0, as CA's
+-- own scripts skip it. create_force puts a generic general at its head.
+function derpy_director:cheat_army(key)
+	local f = alive(key)
+	local home = f and f:home_region()
+	if not home or home:is_null_interface() then return end
+	local best, best_n = nil, 0
+	for _, mf in model_pairs(f:military_force_list(true)) do
+		if mf:has_general() and not mf:is_armed_citizenry() and mf:unit_list():num_items() > best_n then
+			best, best_n = mf, mf:unit_list():num_items()
+		end
+	end
+	if not best then return end
+	local units = {}
+	for i = 1, best_n - 1 do units[#units + 1] = best:unit_list():item_at(i):unit_key() end
+	if #units == 0 then return end
+	local x, y = cm:find_valid_spawn_location_for_character_from_settlement(key, home:name(), false,
+		true, 5)
+	if x == -1 then
+		log("empire " .. key .. " cheat army: no room at " .. home:name())
+		return
+	end
+	cm:create_force(key, table.concat(units, ","), home:name(), x, y, true)
+	log(string.format("empire %s cheat army: %d units at %s", key, #units, home:name()))
+end
+
+-- The abandoned settlement next to its land with the lowest key. A ruin has no owner, so no player
+-- ever loses one.
+function derpy_director:cheat_ruin(key)
+	local f = alive(key)
+	if not f then return end
+	local best
+	for _, r in model_pairs(f:region_list()) do
+		for _, adj in model_pairs(r:adjacent_region_list()) do
+			if adj:is_abandoned() and (not best or adj:name() < best) then best = adj:name() end
+		end
+	end
+	if not best then return end
+	cm:transfer_region_to_faction(best, key)
+	log("empire " .. key .. " cheat ruin: " .. best)
+end
+
+-- Once a turn, from the WorldStartRound listener.
+function derpy_director:empire_turn()
+	if not self:setting("empires") then
+		-- Switched off mid-campaign: hand back a raised potential, and write nothing else.
+		local saved = cm:get_saved_value("derpy_director_empires")
+		if type(saved) == "table" and saved.potential then
+			self:release_potential(saved)
+			cm:set_saved_value("derpy_director_empires", saved)
+		end
+		return
+	end
+	local s = self:seed()
+	if not s or not s.ambitious then return end
+	local turn = cm:model():turn_number()
+	local st = self:empires()
+	if not st.great then self:assign_roles(st) end
+	for _, k in ipairs(self:seed().ambitious) do
+		local f = alive(k)
+		if f and not st.graduated[k] then
+			local n = f:region_list():num_items()
+			if n >= self:empire_goal(k, st) then self:graduate(k, st, turn, n) end
+		end
+	end
+	if turn >= EMPIRE_CHECK_FIRST and (turn - EMPIRE_CHECK_FIRST) % EMPIRE_CHECK_EVERY == 0 then
+		self:empire_check(st, turn)
+	end
+	self:temper(st, turn)
+	self:pace(st)
+	for _, k in ipairs(self:seed().ambitious) do
+		local band = self:empire_band(k, turn)
+		if (band == "behind" or band == "far") and turn - (st.help[k] or -99) >= HELP_EVERY then
+			self:help(k, band, st, turn)
+		end
+		if band == "far" and turn - (st.cheat[k] or -99) >= CHEAT_EVERY then
+			self:empire_cheats(k, st, turn)
+		end
+	end
+	cm:set_saved_value("derpy_director_empires", st)
+end
+
 -- The factions nobody may feed: the measured leader at runaway_merge_tier or above, and every
 -- living invader. Sorted, once each.
 -- min_tier: the merge trigger passes the runaway_merge_tier setting; merge_blocked passes 1, so a
@@ -1157,11 +1841,6 @@ function derpy_director:kin_for(victim_key)
 	return out_list
 end
 
-local function merge_count(turn)
-	if cm:get_saved_value("derpy_director_merge_turn") ~= turn then return 0 end
-	return cm:get_saved_value("derpy_director_merge_count") or 0
-end
-
 -- The payload route, the one that works for every race (force_confederation has done nothing for
 -- Chaos Dwarfs since the 2026-10-09 patch). FactionJoinsConfederation fires INSIDE apply_payload,
 -- so self.merging names the pair while the call runs and from_confederation drops exactly that
@@ -1190,12 +1869,35 @@ function derpy_director:try_merge(sit, mode)
 	if not self:setting(mode == "last_stand" and "merge_last_stand" or "merge_runaway") then
 		return false
 	end
+	local merged = self:merge_first(victim, function()
+		local v = cm:get_faction(victim)
+		local found = {}
+		for _, k in ipairs(self:kin_for(victim)) do
+			local absorber, target = k, victim
+			if mode == "runaway" then
+				local nk, nv = cm:get_faction(k):region_list():num_items(), v:region_list():num_items()
+				if nv > nk or (nv == nk and victim < k) then absorber, target = victim, k end
+			end
+			found[#found + 1] = {absorber, target}
+		end
+		return found
+	end, sit, mode)
+	if not merged then return false end
+	sit.merge = {merged[1], merged[2], mode}
+	return true
+end
+
+-- The end of every merge route, the empires' included: the turn's gate, then each pair from
+-- candidates() in order until one is legal, willing and done. Returns that pair, or nil. who names
+-- the merge in the log. candidates() runs only past the gate, so a dozen early last stands a turn
+-- cost no kin scan.
+function derpy_director:merge_first(who, candidates, sit, mode)
 	local turn = cm:model():turn_number()
 	local price = self:setting("merge_price") or 60
 	local why
 	if turn < (self:setting("merge_from_turn") or 10) then
 		-- A dozen last stands a turn is normal before the first merge turn: said once a turn.
-		if self.too_early_turn == turn then return false end
+		if self.too_early_turn == turn then return nil end
 		self.too_early_turn = turn
 		why = "too early"
 	elseif merge_count(turn) >= (self:setting("merges_per_turn") or 1) then
@@ -1204,19 +1906,14 @@ function derpy_director:try_merge(sit, mode)
 		why = string.format("budget %d cannot pay %d", self:budget(), price)
 	end
 	if why then
-		log(string.format("no merge for %s: %s", victim, why))
-		return false
+		log(string.format("no merge for %s: %s", who, why))
+		return nil
 	end
-	local v = cm:get_faction(victim)
 	local runaways = self:runaway_keys(1)
 	local probed = 0
-	for _, k in ipairs(self:kin_for(victim)) do
+	for _, pair in ipairs(candidates()) do
 		if probed >= MERGE_PROBES then break end
-		local absorber, target = k, victim
-		if mode == "runaway" then
-			local nk, nv = cm:get_faction(k):region_list():num_items(), v:region_list():num_items()
-			if nv > nk or (nv == nk and victim < k) then absorber, target = victim, k end
-		end
+		local absorber, target = pair[1], pair[2]
 		local blocked = self:merge_blocked(absorber, target, sit, runaways)
 		if blocked then
 			log(string.format("no merge %s + %s: %s", absorber, target, blocked))
@@ -1226,19 +1923,18 @@ function derpy_director:try_merge(sit, mode)
 			local willing = not self:setting("merge_needs_willing")
 				or (sa and sb and sa + sb > 0)
 			if oa and ob and willing then
-				if not self:merge(absorber, target, mode) then return false end
+				if not self:merge(absorber, target, mode) then return nil end
 				-- Read before the turn is written: merge_count trusts the count only when the turn matches.
 				local n = merge_count(turn) + 1
 				self:afford(price)
 				cm:set_saved_value("derpy_director_merge_turn", turn)
 				cm:set_saved_value("derpy_director_merge_count", n)
-				sit.merge = {absorber, target, mode}
-				return true
+				return pair
 			end
 		end
 	end
-	log(string.format("no merge for %s: no kin would or could take it in", victim))
-	return false
+	log(string.format("no merge for %s: no kin would or could take it in", who))
+	return nil
 end
 
 -- A computer faction down to its last regions by force folds into stronger kin. Once per victim a
@@ -1767,6 +2463,11 @@ function derpy_director:respond(sit)
 		return
 	end
 
+	-- An empire behind its schedule still draws its neighbours' anger, and nothing the Director
+	-- would fund against it.
+	local sheltered = self:sheltered(sit)
+	if sheltered then log("sheltered: " .. sit.instigator .. " is an empire behind its schedule") end
+
 	-- One stance push per responder, aimed at the aggressor alone.
 	if self:afford(PRICE.mood) then
 		for i = 1, #cast do
@@ -1782,7 +2483,7 @@ function derpy_director:respond(sit)
 	-- situation tells once.
 	local landed = false
 	local one_tell = ONE_TELL[sit.kind]
-	local partners = self:partners(sit, cast)
+	local partners = sheltered and {} or self:partners(sit, cast)
 	for i = 1, #partners do
 		for j = i + 1, #partners do
 			local pa, pb = partners[i], partners[j]
@@ -1823,7 +2524,9 @@ function derpy_director:respond(sit)
 	local seen_key = "derpy_director_seen_" .. sit.instigator .. "_" .. sit.victim
 	local seen = cm:get_saved_value(seen_key)
 	if seen == true then seen = 1 end
-	if outrage < OUTRAGE_FLOOR then
+	if sheltered then
+		log("no grudge: sheltered")
+	elseif outrage < OUTRAGE_FLOOR then
 		log(string.format("no grudge: outrage %.2f (%s) is below %.2f", outrage, why,
 			OUTRAGE_FLOOR))
 	elseif type(seen) == "number" and sit.turn < seen + GRUDGE_MEMORY then
@@ -1855,7 +2558,7 @@ function derpy_director:respond(sit)
 	end
 
 	-- Per-kind consequences. Both are irreversible, so both sit behind the outrage floor too.
-	if outrage >= OUTRAGE_FLOOR then
+	if outrage >= OUTRAGE_FLOOR and not sheltered then
 		if sit.kind == "raze" and self:afford(PRICE.plague) then
 			sit.plague = self:beat_plague(sit) or nil
 		-- Unrest also needs UNREST_FLOOR; razing is rarer, so the plague keeps the lower one.
@@ -2059,6 +2762,20 @@ core:add_listener(
 			-- Each its own guard: a fault in one must not skip the other every turn after.
 			guarded("runaway step", function() derpy_director:runaway_turn() end)
 			guarded("opportunity", function() derpy_director:opportunity() end)
+			guarded("empires", function() derpy_director:empire_turn() end)
+		end
+	end,
+	true
+)
+
+-- Spec 16.2. CA's own siege listener reads context:character() as well as the documented region().
+core:add_listener(
+	"derpy_director_siege",
+	"CharacterBesiegesSettlement",
+	true,
+	function(context)
+		if ENABLED then
+			guarded("siege", function() derpy_director:press_siege(context:character(), context:region()) end)
 		end
 	end,
 	true

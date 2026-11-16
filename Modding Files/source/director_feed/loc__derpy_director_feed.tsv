@@ -30,6 +30,9 @@ event_feed_strings_text_derpy_director_feed_blood_secondary	A wounded beast draw
 event_feed_strings_text_derpy_director_feed_betrayal_title	An Oath Broken	false
 event_feed_strings_text_derpy_director_feed_betrayal_primary	A treaty has been broken, and the powers nearby have noticed. Those who already distrusted the oath-breaker now think even less of them.	false
 event_feed_strings_text_derpy_director_feed_betrayal_secondary	Word of a broken oath travels faster than any army.	false
+event_feed_strings_text_derpy_director_feed_empire_rise_title	A Great Power Rises	false
+event_feed_strings_text_derpy_director_feed_empire_rise_primary	One power has grown into an empire the world cannot ignore. Its capital is marked on the map.	false
+event_feed_strings_text_derpy_director_feed_empire_rise_secondary	The balance of the world has shifted.	false
 event_feed_strings_text_derpy_director_feed_grudge_wh2_dlc09_sc_tmb_tomb_kings_title	Set Down by the Mortuary Cult	false
 event_feed_strings_text_derpy_director_feed_grudge_wh2_dlc09_sc_tmb_tomb_kings_primary	A settlement has been attacked. The {{tr:cultures_subcultures_name_wh2_dlc09_sc_tmb_tomb_kings}} have taken note. They already counted the attacker an enemy, and their opinion of them has now worsened.	false
 event_feed_strings_text_derpy_director_feed_grudge_wh2_dlc09_sc_tmb_tomb_kings_secondary	A liche priest inscribes the offence on a tablet. Nehekhara has waited longer than this to settle far smaller slights.	false
@@ -249,3 +252,10 @@ derpy_director_chronicle_war_opportunism	{i} declared war on {v}, seeing it weak
 derpy_director_chronicle_war_seizure	{i} declared war on {v}, which had seized a convoy belonging to {x}.	false
 derpy_director_chronicle_war_secession	{i} declared war on {v} after {r} broke away from it.	false
 derpy_director_chronicle_war_runaway	{i} declared war on {v}, fearing its power.	false
+derpy_director_chronicle_empire_great	{i} set out to become a great power.	false
+derpy_director_chronicle_empire_lesser	{i} set out to build an empire.	false
+derpy_director_chronicle_empire_fade	The ambitions of {i} came to nothing.	false
+derpy_director_chronicle_empire_goal_great	{i} now rules {n} settlements, a great power the world cannot ignore.	false
+derpy_director_chronicle_empire_goal_lesser	{i} now rules {n} settlements, an empire in its own right.	false
+derpy_director_chronicle_empire_merge	{v} joined {i} in a confederation.	false
+derpy_director_chronicle_empire_peace	{i} made peace with {v} to turn its armies elsewhere.	false

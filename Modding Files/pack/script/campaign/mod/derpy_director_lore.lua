@@ -115,6 +115,11 @@ derpy_director_mct_defaults = {
 	["runaway_threat"] = true,
 	["runaway_alliances"] = true,
 	["runaway_min_regions"] = 10,
+	["empires"] = true,
+	["empire_great_goal"] = 50,
+	["empire_lesser_goal"] = 25,
+	["empire_goal_turn"] = 50,
+	["empire_help"] = "natural",
 }
 
 -- Every race that has a race_<subculture> switch, each on by default.

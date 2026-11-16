@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-11-16, empires
+
+- New: three computer factions a campaign set out to build empires, a great power aiming for 50 settlements by turn
+  50 on Immortal Empires and two lesser ones for 25. An empire behind schedule gets peace on a losing front, kin who
+  join it, a hostile stance towards its weakest neighbour and, for the great power, a friendly one towards its
+  strongest. An empire that dies or stalls is replaced, and the great power's title passes to the strongest.
+- An empire storms every siege it lays once its army has 1.5 times the garrison's strength, instead of waiting the
+  siege out. A player's settlements are never stormed this way.
+- The great power takes an endgame personality where its race has one, and a raised faction potential while it
+  holds the title.
+- The empires are kept out of the runaway power's measurement while they are behind schedule, so the Director does
+  not build one up and punish it in the same campaign.
+- Optional cheats in MCT, off by default: Generous pays an empire far behind 5,000 gold, and Relentless also gives it
+  a copy of its largest army and an abandoned settlement next to its land, at most once every 5 turns.
+- The World Chronicle lists the empires' rise, fall and goals.
+- Five new MCT options: the empires switch, both goals, the goal turn and the cheats.
+
 ## 2026-11-15, the World Chronicle
 
 - New panel: the World Chronicle. It lists what happened this campaign, newest first and grouped by turn, under the

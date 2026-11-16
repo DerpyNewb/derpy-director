@@ -100,6 +100,12 @@ def _hard_chronicle():
         {"k": "war", "i": c, "v": a, "w": "seizure", "r": R[1], "x": b},
         {"k": "war", "i": d, "v": a, "w": "confederation", "r": "", "x": NOLOC},
         {"k": "war", "i": e, "v": a, "w": "runaway"},
+        {"k": "empire", "i": a, "n": 1},
+        {"k": "empire_goal", "i": a, "n": 100, "g": 1},
+        {"k": "empire_goal", "i": b, "n": 100, "g": 2},
+        {"k": "empire_merge", "i": a, "v": b},
+        {"k": "empire_peace", "i": a, "v": b},
+        {"k": "empire_fade", "i": b},
     ]
     out = []
     for n in range(1, 101):
@@ -144,6 +150,20 @@ SENTENCES = [
      "Karak Hirn and Zhufbar turned against Clan Mors. "
      "Karak Hirn and Zhufbar signed a defensive alliance against Clan Mors and raised 1250 gold "
      "each for the war."),
+    # The empires (2026-11-15, phase 4).
+    ({"t": 1, "k": "empire", "i": "mors", "n": 1}, "Clan Mors set out to become a great power."),
+    ({"t": 1, "k": "empire", "i": "hirn", "n": 2}, "Karak Hirn set out to build an empire."),
+    # Not "{i}'s": a possessive on a faction's name reads "Straits's" and "Waaagh!'s".
+    ({"t": 30, "k": "empire_fade", "i": "waaagh"},
+     "The ambitions of Grimgor's Waaagh! came to nothing."),
+    ({"t": 50, "k": "empire_goal", "i": "mors", "n": 50, "g": 1},
+     "Clan Mors now rules 50 settlements, a great power the world cannot ignore."),
+    ({"t": 60, "k": "empire_goal", "i": "hirn", "n": 25, "g": 2},
+     "Karak Hirn now rules 25 settlements, an empire in its own right."),
+    ({"t": 33, "k": "empire_merge", "i": "mors", "v": "azul"},
+     "Karak Azul joined Clan Mors in a confederation."),
+    ({"t": 34, "k": "empire_peace", "i": "mors", "v": "hirn"},
+     "Clan Mors made peace with Karak Hirn to turn its armies elsewhere."),
 ]
 
 

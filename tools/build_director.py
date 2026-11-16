@@ -174,6 +174,18 @@ FEED_ROWS = [
                    "already distrusted the oath-breaker now think even less of them.",
         "secondary": "Word of a broken oath travels faster than any army.",
     },
+    # Phase 4 (2026-11-15): the great power reached its goal. Told to every player at its capital;
+    # the location does the naming, since feed text takes no runtime tokens.
+    {
+        "key": "empire_rise", "index": 8100,
+        "image": "all/elector_confederation",
+        "icon": "event_gen_news_negative.png",
+        "sound": "UI_CAM_POPUP_Message_Event_Negative",
+        "title": "A Great Power Rises",
+        "primary": "One power has grown into an empire the world cannot ignore. Its capital is "
+                   "marked on the map.",
+        "secondary": "The balance of the world has shifted.",
+    },
 ]
 
 # A feed message cannot name a faction: show_message_event takes loc KEYS and the only markup
@@ -291,6 +303,7 @@ MCT_SECTIONS = [
     ("merging", "Confederations"),
     ("races", "Races the Director may confederate"),
     ("runaway", "A runaway power"),
+    ("empires", "Empires"),
 ]
 MCT_OPTIONS = [
     {"key": "merge_last_stand", "kind": "checkbox", "default": True, "section": "merging",
@@ -342,6 +355,38 @@ MCT_OPTIONS = [
      "section": "runaway", "text": "Smallest runaway power",
      "tooltip": "A faction needs at least this many settlements before it can count as a "
                 "runaway power at all."},
+    {"key": "empires", "kind": "checkbox", "default": True, "section": "empires",
+     "text": "Empires rise",
+     "tooltip": "Each campaign, three computer factions set out to build empires: one great power "
+                "and two lesser ones. When one falls behind, the Director helps it along, only in "
+                "ways the world itself could manage, so the late game has rivals worth fighting."},
+    {"key": "empire_great_goal", "kind": "slider", "default": 50, "lo": 30, "hi": 100,
+     "section": "empires", "text": "Great power's goal",
+     "tooltip": "How many settlements the great power sets out to hold on Immortal Empires. "
+                "Smaller maps scale it down."},
+    {"key": "empire_lesser_goal", "kind": "slider", "default": 25, "lo": 10, "hi": 50,
+     "section": "empires", "text": "Lesser empires' goal",
+     "tooltip": "How many settlements each lesser empire sets out to hold on Immortal Empires. "
+                "Smaller maps scale it down."},
+    {"key": "empire_goal_turn", "kind": "slider", "default": 50, "lo": 40, "hi": 150,
+     "section": "empires", "text": "Turn to reach the goal",
+     "tooltip": "The turn by which the empires should reach their goals. An empire that falls "
+                "behind this pace gets help; one that falls far behind for long is replaced."},
+    {"key": "empire_help", "kind": "dropdown", "default": "natural", "section": "empires",
+     "text": "Empire help",
+     "tooltip": "How far the Director goes for an empire that falls far behind. Multiplayer always "
+                "uses Natural.",
+     "values": [
+         ("natural", "Natural",
+          "Only what the world itself could manage: a war to win, a neighbour to fight, peace on "
+          "a losing front and kin who join it. Every settlement it gains, it takes itself."),
+         ("generous", "Generous",
+          "As Natural, and an empire far behind is also paid 5,000 gold, at most once every "
+          "5 turns."),
+         ("relentless", "Relentless",
+          "As Generous, and it is also given a copy of its largest army at its capital and one "
+          "abandoned settlement next to its land."),
+     ]},
 ]
 RACE_TOOLTIP = ("Whether the Director may confederate factions of this race. The game's own "
                 "rules for this race still apply, and the game's own diplomacy is not changed.")
@@ -398,6 +443,9 @@ def mct_page():
             lines += ["%s:slider_set_precision(0)" % v,
                       "%s:slider_set_min_max(%d, %d)" % (v, o["lo"], o["hi"]),
                       "%s:slider_set_step_size(1, 0)" % v]
+        for val, label, tip in o.get("values", ()):
+            lines.append("%s:add_dropdown_value(%s, %s, %s, %s)" % (
+                v, q(val), q(label), q(tip), _lua(val == o["default"])))
         lines += ["%s:set_default_value(%s)" % (v, _lua(o["default"])),
                   "%s:set_assigned_section(%s)" % (v, q(o["section"]))]
     return "\n".join(lines) + "\n"
@@ -440,7 +488,8 @@ def run_mct_page():
         for line in open(dump, encoding="utf-8").read().splitlines():
             key, kind, default = line.split("\t")
             out[key] = (kind, {"true": True, "false": False}.get(default)
-                        if default in ("true", "false") else int(default))
+                        if default in ("true", "false")
+                        else int(default) if default.lstrip("-").isdigit() else default)
         return out
 
 
@@ -493,9 +542,11 @@ local OWNED = {}
 
 local REGIONS = {}
 local OWNERS = {}
-local function region(key, adj, pos)
+local function region(key, adj, pos, abandoned)
   local r = {}
   function r:name() return key end
+  -- A ruin: abandoned, and owned by nobody.
+  function r:is_abandoned() return abandoned == true end
   function r:is_null_interface() return false end
   -- A region with no settlement is a real case (a sea region, a razed ruin), so the stub can
   -- return a null one. logical_position_* is what show_message_event_located documents; the
@@ -522,7 +573,7 @@ local function region(key, adj, pos)
   return r
 end
 for _, spec in ipairs(REGION_SPECS) do
-  REGIONS[spec.key] = region(spec.key, spec.adj, spec.pos)
+  REGIONS[spec.key] = region(spec.key, spec.adj, spec.pos, spec.abandoned)
 end
 
 local function faction(spec)
@@ -532,6 +583,10 @@ local function faction(spec)
   function f:is_dead() return spec.dead == true end
   function f:is_rebel() return spec.rebel == true end
   function f:is_human() return spec.human == true end
+  -- CA's own "is this a major faction" test (battle_logging.lua:75). A fixture is a major unless
+  -- it says minor; a horde race cannot hold what it takes.
+  function f:can_be_human() return spec.minor ~= true end
+  function f:is_allowed_to_capture_territory() return spec.horde ~= true end
   function f:subculture() return spec.subculture or "" end
   local owned = {}
   for _, k in ipairs(spec.owns or {}) do
@@ -542,7 +597,13 @@ local function faction(spec)
   end
   OWNED[spec.name] = owned
   function f:region_list() return list(OWNED[spec.name]) end
-  function f:home_region() return OWNED[spec.name][1] end
+  -- home: a capital that outlives the faction's settlements, which the engine may report for a
+  -- faction that has lost them all (unmeasured), so the "holds a settlement" test is not left to
+  -- the capital check alone.
+  function f:home_region()
+    if spec.home then return REGIONS[spec.home] end
+    return OWNED[spec.name][1]
+  end
   -- CA passes a KEY STRING here, in all five of its own call sites - not an interface.
   function f:diplomatic_attitude_towards(key)
     -- A deliberate engine fault OUTSIDE the builder's own pcall, to prove nothing escapes.
@@ -582,6 +643,18 @@ local function faction(spec)
     end
     return list(items)
   end
+  -- armies: {{general's unit, unit, ...}, ...}. Item 0 is the general's, as in game.
+  function f:military_force_list(skip_garrisons)
+    local forces = {}
+    for _, a in ipairs(spec.armies or {}) do
+      local units = {}
+      for _, u in ipairs(a) do units[#units + 1] = {unit_key = function() return u end} end
+      forces[#forces + 1] = {has_general = function() return true end,
+                             is_armed_citizenry = function() return false end,
+                             unit_list = function() return list(units) end}
+    end
+    return list(forces)
+  end
   function f:is_vassal() return spec.vassal_of ~= nil end
   function f:is_vassal_of(other) return spec.vassal_of == other:name() end
   function f:has_effect_bundle(key)
@@ -599,7 +672,7 @@ for _, spec in ipairs(FACTIONS) do
   ORDER[#ORDER + 1] = f
 end
 
-local CURRENT_TURN = 0
+local CURRENT_TURN = START_TURN or 0
 
 cm = {}
 function cm:model()
@@ -608,6 +681,8 @@ function cm:model()
       faction_list = function() return list(ORDER) end,
       region_manager = function() return {
         region_by_key = function(_, k) return REGIONS[k] end,
+        -- Only its size is read: 572 on vanilla Immortal Empires, as the game counts them.
+        region_list = function() return {num_items = function() return MAP_REGIONS end} end,
       } end,
     } end,
     turn_number = function() return CURRENT_TURN end,
@@ -658,6 +733,32 @@ function cm:apply_payload(p, faction)
   if fns then for _, fn in ipairs(fns) do fn(ctx) end end
 end
 function cm:get_faction(key) return BY_NAME[key] or false end
+-- CA's 9.0 wrapper (lib_campaign_manager.lua:6501): it makes the id itself and refuses a
+-- sixth argument that is not a boolean.
+function cm:create_force(faction, units, region, x, y, exclude, cb)
+  if type(faction) ~= "string" or type(units) ~= "string" or type(region) ~= "string"
+     or type(x) ~= "number" or type(y) ~= "number" or type(exclude) ~= "boolean" then
+    error("create_force takes (faction, units, region, x, y, exclude_named_characters)")
+  end
+  record("create_force", faction, units, region)
+end
+function cm:transfer_region_to_faction(region, faction)
+  if type(region) ~= "string" or type(faction) ~= "string" then
+    error("transfer_region_to_faction takes two KEYS")
+  end
+  record("transfer_region_to_faction", region, faction)
+  OWNERS[region] = faction
+  table.insert(OWNED[faction], REGIONS[region])
+end
+function cm:find_valid_spawn_location_for_character_from_settlement(f, r, sea, same, dist)
+  record("spawn_location", f, r)
+  return 1, 2
+end
+-- Two KEY STRINGS, per CA's doc.
+function cm:force_make_peace(a, b)
+  if type(a) ~= "string" or type(b) ~= "string" then error("force_make_peace takes two KEYS") end
+  record("force_make_peace", a, b)
+end
 function cm:add_first_tick_callback(fn) FIRST_TICKS[#FIRST_TICKS + 1] = fn end
 -- A preload is the value the SAVE carried in, so it seeds the store once and is then written
 -- over like any other. Reading PRELOAD ahead of SAVED on every get - as this did until
@@ -737,6 +838,32 @@ function cm:treasury_mod(key, amount)
 end
 function cm:cai_strategic_stance_manager_promote_specified_stance_towards_target_faction(a, b, st)
   record("stance_promote", a, b, st)
+end
+-- Undocumented; CA calls it with a faction INTERFACE (wh3_campaign_ai.lua:1204). Measured live
+-- 2026-11-15: (f, true, X) sets the total to X, (f, false, 0) restores the game's own value.
+function cm:faction_set_total_potential_override_value(f, on, v)
+  if type(f) ~= "table" or type(on) ~= "boolean" or type(v) ~= "number" then
+    error("faction_set_total_potential_override_value takes (faction interface, bool, number)")
+  end
+  record("potential", f:name(), tostring(on), tostring(v))
+end
+-- Documented as (character lookup string, region key).
+function cm:attack_region(lookup, region_key)
+  if type(lookup) ~= "string" or type(region_key) ~= "string" then
+    error("attack_region takes a lookup string and a region key")
+  end
+  record("attack_region", lookup, region_key)
+end
+function cm:char_lookup_str(c)
+  local cqi = type(c) == "number" and c or c:command_queue_index()
+  return "character_cqi:" .. tostring(cqi)
+end
+-- Documented as (faction key, personality key), both strings.
+function cm:force_change_cai_faction_personality(f, p)
+  if type(f) ~= "string" or type(p) ~= "string" then
+    error("force_change_cai_faction_personality takes two KEYS")
+  end
+  record("personality", f, p)
 end
 function cm:set_base_strategic_threat_score(f, score)
   record("set_base_strategic_threat_score", f:name(), score)
@@ -847,14 +974,18 @@ for _, fn in ipairs(FIRST_TICKS) do fn() end
 -- once per turn, including turns nothing else happens on - which is what lets an idle stretch
 -- accrue budget. Modelling this is not optional: the refill listener was invisible to a pump
 -- that only dispatched the watched event, and the live budget drained to zero and stayed there.
-local LAST_TURN = 0
+-- A save loaded mid-campaign (start_turn): the turns before it already happened.
+local LAST_TURN = START_TURN and (START_TURN - 1) or 0
 for _, ev in ipairs(EVENTS) do
-  CURRENT_TURN = ev.turn or (CURRENT_TURN + 1)
-  while LAST_TURN < CURRENT_TURN do
+  local this_turn = ev.turn or (CURRENT_TURN + 1)
+  -- Each skipped turn starts as itself: a step on every tenth turn must see that turn.
+  while LAST_TURN < this_turn do
     LAST_TURN = LAST_TURN + 1
+    CURRENT_TURN = LAST_TURN
     local starts = LISTENERS["WorldStartRound"]
     if starts then for _, fn in ipairs(starts) do fn({}) end end
   end
+  CURRENT_TURN = this_turn
   local fns = LISTENERS[ev.event]
   -- Not engine events: Resource Overhaul's own seizure calls, made the way its turn makes them.
   -- A stale cargo is one already delivered or taken, which the real calls ignore.
@@ -943,6 +1074,35 @@ for _, ev in ipairs(EVENTS) do
         confederation = function() return BY_NAME[ev.instigator] end,
         faction = function() return BY_NAME[ev.victim] end,
       }
+    -- Documented: region(), "the region besieged". CA's own siege listener also reads
+    -- character() (wh3_campaign_ai.lua:448). ev.strength is the besieging force's strength
+    -- (nil: no force), ev.garrison the garrison army's (nil: none).
+    elseif ev.event == "CharacterBesiegesSettlement" then
+      local function garrison()
+        return {
+          is_null_interface = function() return false end,
+          army = function()
+            if ev.garrison == nil then return {is_null_interface = function() return true end} end
+            return {is_null_interface = function() return false end,
+                    strength = function() return ev.garrison end}
+          end,
+        }
+      end
+      ctx = {
+        region = function()
+          local r = REGIONS[ev.region] or region(ev.region, {})
+          return setmetatable({garrison_residence = garrison}, {__index = r})
+        end,
+        character = function()
+          return {
+            is_null_interface = function() return false end,
+            faction = function() return BY_NAME[ev.instigator] end,
+            command_queue_index = function() return 77 end,
+            has_military_force = function() return ev.strength ~= nil end,
+            military_force = function() return {strength = function() return ev.strength end} end,
+          }
+        end,
+      }
     else
       ctx = {
         character = function()
@@ -990,7 +1150,7 @@ TEST_SEED = {"temperament": "rising", "phase": 0, "hot": [], "ambitious": []}
 
 STATE_KEYS = ["derpy_director_seed", "derpy_director_budget", "derpy_director_cooldowns",
               "derpy_director_news", "derpy_director_last_tier", "derpy_director_merge_count",
-              "derpy_director_chronicle"]
+              "derpy_director_chronicle", "derpy_director_empires"]
 
 
 def _lua(v):
@@ -1016,12 +1176,14 @@ def _faction_table(factions):
         parts = ["name = %s" % _lua(f["name"]),
                  "regions = %s" % _lua(f.get("regions", 0)),
                  "subculture = %s" % _lua(f.get("subculture", ""))]
-        for flag in ("dead", "rebel", "human", "throws"):
+        for flag in ("dead", "rebel", "human", "throws", "minor", "horde"):
             if f.get(flag):
                 parts.append("%s = true" % flag)
+        if f.get("home"):
+            parts.append("home = %s" % _lua(f["home"]))
         # met absent = met everyone; an EMPTY met list is a real case (met nobody), so it is
         # emitted whenever the key is present.
-        for lst in ("owns", "wars", "allies", "military", "bundles"):
+        for lst in ("owns", "wars", "allies", "military", "bundles", "armies"):
             if f.get(lst):
                 parts.append("%s = %s" % (lst, _lua(f[lst])))
         if "met" in f:
@@ -1042,8 +1204,8 @@ def _regions_table(regions):
         # pos defaults to a real point so every fixture exercises the LOCATED call; give a
         # region pos=None explicitly to model one with no settlement.
         pos = r["pos"] if "pos" in r else [100, 200]
-        rows.append("{key = %s, adj = %s, pos = %s}" % (
-            _lua(r["key"]), _lua(r.get("adj", [])), _lua(pos)))
+        rows.append("{key = %s, adj = %s, pos = %s, abandoned = %s}" % (
+            _lua(r["key"]), _lua(r.get("adj", [])), _lua(pos), _lua(r.get("abandoned", False))))
     return "{" + ", ".join(rows) + "}"
 
 
@@ -1055,17 +1217,20 @@ def _events_table(events):
         # harness that advances a turn per event can never reproduce that contention.
         rows.append(
             "{event = %s, instigator = %s, victim = %s, region = %s, turn = %s, reason = %s, "
-            "stale = %s, treaty = %s, n = %s, code = %s, met = %s, war = %s}"
+            "stale = %s, treaty = %s, n = %s, code = %s, met = %s, war = %s, strength = %s, "
+            "garrison = %s}"
             % (_lua(e["event"]), _lua(e.get("instigator")), _lua(e.get("victim")),
                _lua(e.get("region")), _lua(e.get("turn")), _lua(e.get("reason")),
                _lua(e.get("stale", False)), _lua(e.get("treaty")), _lua(e.get("n")),
-               _lua(e.get("code")), _lua(e.get("met")), _lua(e.get("war"))))
+               _lua(e.get("code")), _lua(e.get("met")), _lua(e.get("war")),
+               _lua(e.get("strength")), _lua(e.get("garrison"))))
     return "{" + ", ".join(rows) + "}"
 
 
 def run_lua(factions, events=None, disable=False, preload=None, seed=1,
             regions_spec=None, scores=None, companions=None, mct=None, multiplayer=False,
-            deny=None, payload_error=False, script_state=None, quiet_runaway=True):
+            deny=None, payload_error=False, script_state=None, quiet_runaway=True,
+            map_regions=572, start_turn=None):
     """Run the SHIPPED Lua under the harness. Returns (calls, state).
 
     quiet_runaway (default True) installs MCT with the runaway step's threat score, grudge and
@@ -1078,6 +1243,9 @@ def run_lua(factions, events=None, disable=False, preload=None, seed=1,
     get_mct at all. multiplayer: cm:is_multiplayer() answers true. deny: ["a|b"] makes
     cai_evaluate_quick_deal_action(a, b, *) answer ok=false. payload_error: cm:apply_payload raises.
     script_state: {key: bool} for shared_states_manager():get_state_as_bool_value.
+
+    map_regions: how many regions the map reports (vanilla Immortal Empires' 572 by default, as
+    measured in game on 2026-11-15; the DB's 279 stands in for a smaller map). start_turn: a save loaded at that turn, so no turn before it starts in this run.
 
     companions: {"ro": True, "gg": True, "gg_held": n, "ic": True, "ic_missing": call} installs
     stand-ins for Resource Overhaul, the Great Guilds and the Iron Court; absent, none of the
@@ -1111,14 +1279,15 @@ def run_lua(factions, events=None, disable=False, preload=None, seed=1,
             "SCRIPT_PATH = %s\nLORE_PATH = %s\nFACTIONS = %s\nEVENTS = %s\n"
             "PRELOAD = %s\nDUMP_PATH = %s\nSTATE_KEYS = %s\nSEED_ROLL = %s\n"
             "REGION_SPECS = %s\nSCORES = %s\nCOMPANIONS = %s\nMCT_VALUES = %s\n"
-            "MULTIPLAYER = %s\nDENY = %s\nPAYLOAD_ERROR = %s\nSCRIPT_STATE = %s\n" % (
+            "MULTIPLAYER = %s\nDENY = %s\nPAYLOAD_ERROR = %s\nSCRIPT_STATE = %s\n"
+            "MAP_REGIONS = %s\nSTART_TURN = %s\n" % (
                 _lua(script), _lua(lore_path), _faction_table(factions),
                 _events_table(events or []), _lua(preload or {}), _lua(dump),
                 _lua(STATE_KEYS), _lua(seed), _regions_table(regions_spec),
                 _lua(scores or {}), _lua(companions or {}),
                 _lua(mct) if mct is not None else "nil", _lua(bool(multiplayer)),
                 _lua({k: True for k in (deny or [])}), _lua(bool(payload_error)),
-                _lua(script_state or {})))
+                _lua(script_state or {}), _lua(map_regions), _lua(start_turn)))
         harness = os.path.join(td, "h.lua")
         open(harness, "w", encoding="utf-8").write(preamble + HARNESS)
         r = subprocess.run([LUA, harness], capture_output=True, text=True)
@@ -2002,7 +2171,9 @@ def _selftest():
     # first_tick, which fires once per campaign LOAD, so the budget was a one-way drain and this
     # run would score the same as the burst above.
     spread = [dict(e, turn=i + 1) for i, e in enumerate(burst)]
-    calls6, _ = run_lua(burst_world, events=spread, regions_spec=burst_regions)
+    # Empires off: from turn 20 they would be helped from the same budget this measures.
+    calls6, _ = run_lua(burst_world, events=spread, regions_spec=burst_regions,
+                        mct={"empires": False})
     over_turns = len([c for c in calls6 if c[0] == "cai_add_diplomatic_event"])
     assert over_turns == 30, \
         "one situation a turn must never be starved, got %d of 30" % over_turns
@@ -2557,6 +2728,13 @@ def _selftest():
     _selftest_merge()
     _selftest_runaway_merge()
     _selftest_chronicle()
+    _selftest_empires_pick()
+    _selftest_empires_schedule()
+    _selftest_empires_shelter()
+    _selftest_empires_levers()
+    _selftest_empires_cheats()
+    _selftest_empires_great()
+    _selftest_empires_pace()
     # The Chronicle's rows ship in the Director's loc file, every one, under its prefix: a name the
     # panel asks for with no row draws an empty line in game.
     import gen_director_ui as UI
@@ -2838,6 +3016,542 @@ def _selftest_chronicle():
                                          dump(2)], mct={"runaway_threat": False})
     assert wars(c) == [], wars(c)
     print("selftest: chronicle ok")
+
+
+def _line_regions(n):
+    """r1..rn in a row, each next to the one before and after: hop counts are index differences."""
+    return [{"key": "r%d" % i, "adj": [k for k in ("r%d" % (i - 1), "r%d" % (i + 1))
+                                       if 1 <= int(k[1:]) <= n]} for i in range(1, n + 1)]
+
+
+def _selftest_empires_pick():
+    """34. Phase 4 (2026-11-15): the empires are the seed's three ambitious factions, drawn from the
+    factions a player could have picked (can_be_human, CA's own major-faction test) that can hold
+    land, no two capitals within EMPIRE_SPREAD_HOPS (6) of each other, most settlements first.
+    Minors fill in only when too few majors are left. Each pick is a Chronicle entry, the first the
+    great power."""
+    EMP, DWF = "wh_main_sc_emp_empire", "wh_main_sc_dwf_dwarfs"
+    roll = {"derpy_director_seed": False}
+    picks_of = lambda c: evals(c)[0].split(",")
+    ev = [{"event": "Eval", "turn": 1,
+           "code": "return table.concat(derpy_director:seed().ambitious, ',')"},
+          {"event": "Eval", "turn": 1, "code": CHRON_DUMP}]
+    world = [
+        # majors on the line: b_near sits 3 hops from a_biggest, so spread rules it out
+        {"name": "a_biggest", "regions": 6, "owns": ["r1"], "subculture": EMP},
+        {"name": "b_near", "regions": 5, "owns": ["r4"], "subculture": DWF},
+        {"name": "c_major", "regions": 2, "owns": ["r8"], "subculture": DWF},
+        # drawn after c_major but larger, so the size order differs from the draw order
+        {"name": "d_major", "regions": 4, "owns": ["r15"], "subculture": EMP},
+        {"name": "e_major", "regions": 3, "owns": ["r22"], "subculture": EMP},
+        # never candidates, whatever their size or place in the draw
+        {"name": "aa_minor", "regions": 9, "minor": True, "subculture": EMP},
+        {"name": "aa_horde", "regions": 9, "horde": True, "subculture": EMP},
+        {"name": "aa_player", "regions": 9, "human": True, "subculture": EMP},
+        {"name": "aa_rebel", "regions": 9, "rebel": True, "subculture": EMP},
+        {"name": "aa_vassal", "regions": 9, "vassal_of": "a_biggest", "subculture": EMP},
+        # landless, though the engine still names a capital far from everyone
+        {"name": "aa_empty", "regions": 0, "home": "r12", "subculture": EMP},
+        {"name": "wh3_dlc29_chaos_invasion_confederation_owner", "regions": 9, "subculture": EMP},
+    ]
+    c, _ = run_lua(world, events=ev, preload=roll, regions_spec=_line_regions(22))
+    picks = picks_of(c)
+    assert len(picks) == 3, picks
+    assert not [p for p in picks if p.startswith("aa_") or p.startswith("wh3_dlc29")], picks
+    assert "b_near" not in picks, picks
+    assert picks == ["a_biggest", "d_major", "c_major"], picks   # most settlements first
+    roles = [(x["k"], x["i"], x["n"]) for x in _chron(c) if x["k"] == "empire"]
+    assert roles == [("empire", picks[0], "1"), ("empire", picks[1], "2"),
+                     ("empire", picks[2], "2")], roles
+    # The great power named at the roll keeps the title at the first turn start, though another
+    # empire passed it in the meantime (live, 2026-11-15: the title moved on turn 2 while the
+    # Chronicle still named the first). Turn 0 is the rest of the turn the seed was rolled in.
+    great = [{"event": "SetRegions", "instigator": "d_major", "n": 10, "turn": 0},
+             {"event": "Eval", "turn": 1,
+              "code": "return tostring(cm:get_saved_value('derpy_director_empires').great)"}]
+    c, _ = run_lua(world, events=great, preload=roll, regions_spec=_line_regions(22))
+    assert evals(c) == ["a_biggest"], evals(c)
+    # Too few majors: the one major, then minors to fill, still spread.
+    small = [{"name": "only_major", "regions": 3, "owns": ["r1"], "subculture": EMP},
+             {"name": "minor_a", "regions": 1, "owns": ["r3"], "minor": True, "subculture": EMP},
+             {"name": "minor_b", "regions": 1, "owns": ["r9"], "minor": True, "subculture": EMP},
+             {"name": "minor_c", "regions": 1, "owns": ["r16"], "minor": True, "subculture": EMP}]
+    c, _ = run_lua(small, events=ev, preload=roll, regions_spec=_line_regions(22))
+    picks = picks_of(c)
+    assert picks == ["only_major", "minor_b", "minor_c"], picks
+    print("selftest: empires pick ok")
+
+
+def _empire_world(great=6, lesser=3, third=2, extra=()):
+    """Three majors on a 22-region line, far enough apart, plus a player and any extra factions."""
+    EMP, DWF = "wh_main_sc_emp_empire", "wh_main_sc_dwf_dwarfs"
+    return [{"name": "great", "regions": great, "owns": ["r1"], "subculture": EMP},
+            {"name": "lesser", "regions": lesser, "owns": ["r10"], "subculture": DWF},
+            {"name": "third", "regions": third, "owns": ["r20"], "subculture": DWF},
+            {"name": "player", "regions": 3, "human": True, "subculture": EMP}] + list(extra)
+
+
+def _empire_seed(*keys):
+    return {"derpy_director_seed": dict(TEST_SEED, ambitious=list(keys or ("great", "lesser", "third")))}
+
+
+def _empire_run(world, events, preload=None, **k):
+    pre = _empire_seed()
+    pre.update(preload or {})
+    # The fixtures' numbers were written against an 80-turn schedule; the shipped default is 50
+    # since 2026-11-16, pinned by _selftest_empires_schedule and _selftest_mct.
+    k["mct"] = dict({"empire_goal_turn": 80}, **(k.get("mct") or {}))
+    return run_lua(world, events=events, preload=pre, regions_spec=_line_regions(22), **k)
+
+
+def _selftest_empires_schedule():
+    """35. Phase 4: goals scale with the map, the schedule and its bands, roles, graduation (sticky,
+    the great power's alone told by feed message), and replacement every 10 turns from turn 20 of a
+    dead or stalled empire by the fastest grower - never of a graduate. A save from before phase 4
+    gets roles at its first turn start and its weak picks replaced at the next check."""
+    EMP = "wh_main_sc_emp_empire"
+    ev = lambda code, turn=1: {"event": "Eval", "turn": turn, "code": code}
+    one = lambda code, turn=1, world=None, **k: evals(_empire_run(
+        world or _empire_world(), [ev(code, turn)], **k)[0])[0]
+    goal = lambda key, mr=572: one("return derpy_director:empire_goal('%s')" % key, map_regions=mr)
+    assert (goal("great"), goal("lesser")) == ("50", "25"), (goal("great"), goal("lesser"))
+    assert (goal("great", 279), goal("lesser", 279)) == ("24", "12")
+    exp = lambda t: float(one("return derpy_director:expected('great', %d)" % t))
+    assert [exp(t) for t in (10, 45, 80, 100)] == [0.0, 25.0, 50.0, 50.0]
+    # The shipped default (2026-11-16): 50 by turn 50, so 25 on turn 30 and the goal from turn 50.
+    dflt = lambda t: float(evals(run_lua(_empire_world(), events=[ev(
+        "return derpy_director:expected('great', %d)" % t)], preload=_empire_seed(),
+        regions_spec=_line_regions(22))[0])[0])
+    assert [dflt(t) for t in (10, 30, 50, 80)] == [0.0, 25.0, 50.0, 50.0], \
+        [dflt(t) for t in (10, 30, 50, 80)]
+    band = lambda n, turn=50: one("return tostring(derpy_director:empire_band('great', %d))" % turn,
+                                  turn=turn, world=_empire_world(great=n))
+    # turn 50: expected 28.57 for the great power, far below 17.14
+    assert [band(n) for n in (30, 28, 18, 17)] == ["ahead", "behind", "behind", "far"]
+    assert band(5, turn=24) == "behind"               # far only from turn 25
+
+    # Graduation: the great power at 50 -> one entry, one located message to the one player, and
+    # "graduated" for ever after, even shrunk to 30. A lesser empire's has g=2 and no message.
+    setr = lambda who, n, t: {"event": "SetRegions", "instigator": who, "n": n, "turn": t}
+    told = lambda c: [x for x in c if x[0] == "show_message_event_located"
+                      and x[2].endswith("empire_rise_title")]
+    c, _ = _empire_run(_empire_world(), [setr("great", 50, 12), setr("great", 30, 14),
+                                         setr("lesser", 25, 15),
+                                         ev("return tostring(derpy_director:empire_band('great', 16))", 16),
+                                         ev(CHRON_DUMP, 16)])
+    goals = [(x["k"], x["i"], x["n"], x["g"]) for x in _chron(c) if x["k"] == "empire_goal"]
+    assert goals == [("empire_goal", "great", "50", "1"), ("empire_goal", "lesser", "25", "2")], goals
+    assert len(told(c)) == 1 and told(c)[0][1] == "player", told(c)
+    assert evals(c)[0] == "graduated", evals(c)
+
+    # Replacement at turn 20: dead_one and stalled_one (1 settlement against 3.57 expected) go to
+    # the two fastest growers since the turn-1 snapshot, spread from the rest; fade, then empire.
+    growers = [{"name": "grower_a", "regions": 2, "owns": ["r15"], "subculture": EMP},
+               {"name": "grower_b", "regions": 2, "owns": ["r22"], "subculture": EMP},
+               {"name": "dead_one", "regions": 4, "dead": True, "subculture": EMP},
+               {"name": "stalled_one", "regions": 1, "owns": ["r8"], "subculture": EMP}]
+    # great at 12 stays the great power over grower_a's 9, so both newcomers are lesser. big_still
+    # is larger than either grower and gained nothing: growth, not size, chooses.
+    big_still = {"name": "big_still", "regions": 10, "owns": ["r11"], "subculture": EMP}
+    w = [f for f in _empire_world(great=12, extra=growers + [big_still])
+         if f["name"] not in ("lesser", "third")]
+    seeded = _empire_seed("great", "dead_one", "stalled_one")
+    c, _ = _empire_run(w, [setr("grower_a", 9, 10), setr("grower_b", 7, 10), ev(CHRON_DUMP, 21)],
+                       preload=seeded)
+    ch = _chron(c)
+    assert [x["i"] for x in ch if x["k"] == "empire_fade"] == ["dead_one", "stalled_one"], ch
+    assert [(x["i"], x["n"]) for x in ch if x["k"] == "empire"] == [("grower_a", "2"),
+                                                                      ("grower_b", "2")], ch
+    # A graduate is never replaced, shrunk or dead (spec 8).
+    grad = {"derpy_director_empires": {"great": "great", "graduated": {"great": 5}}}
+    for wg in (_empire_world(great=2), [dict(f, dead=True) if f["name"] == "great" else f
+                                        for f in _empire_world()]):
+        c, _ = _empire_run(wg + growers[:2], [ev(CHRON_DUMP, 21)], preload=grad)
+        assert not [x for x in _chron(c) if x["k"] == "empire_fade" and x["i"] == "great"], _chron(c)
+
+    # Review Focus 1: a save from before phase 4, loaded at turn 57, two minors among its ambitious.
+    old = [{"name": "minor_a", "regions": 1, "owns": ["r3"], "minor": True, "subculture": EMP},
+           {"name": "minor_b", "regions": 1, "owns": ["r12"], "minor": True, "subculture": EMP}]
+    w = _empire_world(great=20, extra=old + growers[:2])
+    c, _ = _empire_run(w, [ev("local s = cm:get_saved_value('derpy_director_empires') "
+                              "return tostring(s and s.great)", 57), ev(CHRON_DUMP, 61)],
+                       preload=_empire_seed("minor_a", "great", "minor_b"), start_turn=57)
+    assert evals(c)[0] == "great", evals(c)
+    assert [(x["i"], x["t"]) for x in _chron(c) if x["k"] == "empire_fade"] == [
+        ("minor_a", "60"), ("minor_b", "60")], _chron(c)
+    assert not outs(c, "errored"), outs(c, "errored")
+    # Review Focus 2: a dead empire has no band, so nothing helps it.
+    w = [dict(f, dead=True) if f["name"] == "lesser" else f for f in _empire_world()]
+    assert one("return tostring(derpy_director:empire_band('lesser', 30))", 30, world=w) == "nil"
+    # Review Focus 5: the switch off writes no state and gives no band.
+    off = dict(mct={"empires": False})
+    assert one("return tostring(cm:get_saved_value('derpy_director_empires'))", 30, **off) == "nil"
+    assert one("return tostring(derpy_director:empire_band('great', 30))", 30, **off) == "nil"
+    print("selftest: empires schedule ok")
+
+
+def _selftest_empires_shelter():
+    """36. Phase 4: shelter. An empire at or behind its schedule is never named the runaway leader,
+    though it still counts as the runner-up, and its deeds against a computer faction draw the
+    stance pushes but no pact, war chest, shield, grudge, unrest or plague. Ahead of schedule,
+    graduated, against a player, or with the Empires switch off, it is answered in full."""
+    CHD, DWF = "wh3_dlc23_sc_chd_chaos_dwarfs", "wh_main_sc_dwf_dwarfs"
+    ev = lambda code, turn: {"event": "Eval", "turn": turn, "code": code}
+    LEAD = ("local l, b, s, r = derpy_director:measure() "
+            "return l:name() .. ',' .. b .. ',' .. s .. ',' .. derpy_director:tier_for(r, b, 0)")
+    # Turn 61 is no check turn: expected 36.4 for the great power, so 30 is behind and not far.
+    measure_world = [{"name": "empire", "regions": 30, "subculture": CHD},
+                     {"name": "leader", "regions": 20, "subculture": DWF},
+                     {"name": "runner", "regions": 8, "subculture": DWF},
+                     {"name": "player", "regions": 3, "human": True, "subculture": DWF}]
+    seed = {"derpy_director_seed": dict(TEST_SEED, ambitious=["empire"])}
+
+    def lead(world=measure_world, turn=61, preload=None, **k):
+        pre = dict(seed)
+        pre.update(preload or {})
+        c, _ = run_lua(world, events=[ev(LEAD, turn)], preload=pre, start_turn=turn, **k)
+        return tuple(evals(c)[0].split(","))
+    assert lead() == ("leader", "20", "30", "0"), lead()
+    assert lead(turn=21)[0] == "empire", lead(turn=21)          # ahead: it can be named
+    grad = {"derpy_director_empires": {"great": "empire", "graduated": {"empire": 40}}}
+    assert lead(preload=grad)[0] == "empire", lead(preload=grad)
+    big_player = [dict(f, regions=40) if f["name"] == "player" else f for f in measure_world]
+    assert lead(big_player) == ("player", "40", "30", "0"), lead(big_player)
+    assert lead(mct={"empires": False})[0] == "empire"          # Review Focus 5
+
+    # respond(): the empire razes a town of its own kin, the deed that draws every answer.
+    regions = [{"key": "r_victim", "adj": ["r_near"]},
+               {"key": "r_near", "adj": ["r_victim", "r_mid"]},
+               {"key": "r_mid", "adj": ["r_near"]}]
+    world = [{"name": "sacker", "regions": 20, "subculture": CHD},
+             {"name": "victim", "subculture": CHD, "owns": ["r_victim"], "regions": 3},
+             {"name": "hold_a", "subculture": DWF, "owns": ["r_near"], "regions": 3},
+             {"name": "hold_b", "subculture": DWF, "owns": ["r_near"], "regions": 3}]
+    HELD = ("force_alliance", "treasury_mod", "shield_on", "cai_add_diplomatic_event",
+            "force_rebellion_with_faction", "spawn_plague_at_region")
+
+    def raze(turn=61, world=world, preload=None, **k):
+        pre = {"derpy_director_seed": dict(TEST_SEED, ambitious=["sacker"])}
+        pre.update(preload or {})
+        c, _ = run_lua(world, events=[{"event": "SetBudget", "n": 1000, "turn": turn},
+                                      {"event": "CharacterRazedSettlement", "instigator": "sacker",
+                                       "victim": "victim", "region": "r_victim", "turn": turn}],
+                       preload=pre, regions_spec=regions, start_turn=turn,
+                       scores={"hold_a|hold_b": 5, "hold_b|hold_a": 5}, **k)
+        return c
+    held = lambda c: sorted({x[0] for x in c if x[0] in HELD})
+    pushes = lambda c: [x for x in c if x[0] == "stance_promote" and x[2] == "sacker"]
+    # turn 61: 20 settlements against 36.4 expected, far behind, sheltered
+    c = raze()
+    assert pushes(c) and not held(c), (pushes(c), held(c))
+    # each held block is reachable in this fixture: ahead of schedule, all three answer
+    full = ["cai_add_diplomatic_event", "force_alliance", "shield_on", "spawn_plague_at_region",
+            "treasury_mod"]
+    assert held(raze(turn=21)) == full, held(raze(turn=21))
+    assert held(raze(mct={"empires": False})) == full            # Review Focus 5
+    assert held(raze(preload={"derpy_director_empires": {"great": "sacker",
+                                                         "graduated": {"sacker": 40}}})) == full
+    # a player's town: answered in full, whatever the schedule
+    vs_player = [dict(f, human=True) if f["name"] == "victim" else f for f in world]
+    assert held(raze(world=vs_player)), held(raze(world=vs_player))
+    print("selftest: empires shelter ok")
+
+
+def _selftest_empires_levers():
+    """37. Phase 4: the levers. Every 3 turns an empire behind its schedule with no war next door
+    gets a hostile stance toward its weakest neighbour; far behind, peace with a stronger enemy and a
+    weaker kin folded in, at most one every 10 turns. Never a player, never another empire, always
+    paid from the budget. No war target: the live spike found no route (Task 1)."""
+    EMP, DWF, GRN = "wh_main_sc_emp_empire", "wh_main_sc_dwf_dwarfs", "wh_main_sc_grn_greenskins"
+    others = ["r_weak", "r_strong", "r_player", "r_kin", "r_kin2", "r_nb", "r_emp"]
+    # r_top: far from everyone, for a great power that leaves "great" a lesser empire.
+    regions = [{"key": "r_home", "adj": others}] + [{"key": k, "adj": ["r_home"]} for k in others] + \
+        [{"key": "r_top", "adj": []}]
+    # Every computer faction borders the empire, so none is far enough away to fill an empty place.
+    base = {"great": {"name": "great", "regions": 10, "owns": ["r_home"], "subculture": EMP,
+                      "wars": ["weak_enemy", "strong_enemy"]},
+            "weak_enemy": {"name": "weak_enemy", "regions": 2, "owns": ["r_weak"], "subculture": DWF},
+            "strong_enemy": {"name": "strong_enemy", "regions": 9, "owns": ["r_strong"],
+                             "subculture": DWF},
+            "weak_kin": {"name": "weak_kin", "regions": 1, "owns": ["r_kin"], "subculture": EMP},
+            "weak_neighbour": {"name": "weak_neighbour", "regions": 1, "owns": ["r_nb"],
+                               "subculture": GRN},
+            "player": {"name": "player", "regions": 1, "owns": ["r_player"], "human": True,
+                       "subculture": DWF}}
+
+    def world(drop=(), **change):
+        w = {k: dict(v) for k, v in base.items() if k not in drop}
+        for k, v in change.items():
+            w.setdefault(k, {"name": k})
+            w[k].update(v)
+        return list(w.values())
+    ev = lambda code, turn: {"event": "Eval", "turn": turn, "code": code}
+    BUDGET = "return tostring(cm:get_saved_value('derpy_director_budget'))"
+
+    # Turn 31 is no check turn: expected 15, so 10 settlements is behind and 6 far behind.
+    def run(w, turn=31, until=None, preload=None, scores=None, events=(), **k):
+        pre = {"derpy_director_seed": dict(TEST_SEED, ambitious=["great"])}
+        pre.update(preload or {})
+        evs = list(events) + [ev(BUDGET, until or turn), ev(CHRON_DUMP, until or turn)]
+        k["mct"] = dict({"empire_goal_turn": 80}, **(k.get("mct") or {}))   # 80-turn fixtures
+        c, _ = run_lua(w, events=evs, preload=pre, regions_spec=regions, start_turn=turn,
+                       scores=scores or {}, **k)
+        return c
+    pushes = lambda c: [tuple(x[1:4]) for x in c if x[0] == "stance_promote"]
+    peace = lambda c: [tuple(x[1:3]) for x in c if x[0] == "force_make_peace"]
+    merges = lambda c: [tuple(x[1:3]) for x in c if x[0] == "apply_payload"]
+    entries = lambda c: [(x["k"], x["i"], x.get("v")) for x in _chron(c)]
+    budget = lambda c: int(evals(c)[-2])
+
+    # The war target: the weakest enemy town next door, never the player's or another empire's.
+    # No war target exists (Task 1): a war next door is left for it to win, so no push.
+    hostile = ("great", "weak_neighbour", "CAI_STRATEGIC_STANCE_VERY_UNFRIENDLY")
+    friendly = lambda k: ("great", k, "CAI_STRATEGIC_STANCE_FRIENDLY")
+    assert not pushes(run(world())), pushes(run(world()))
+    # The one payload is the kin merge a great power behind now gets (spec 15.1); no war target.
+    assert merges(run(world())) == [("great", "weak_kin")], merges(run(world()))
+    # No war: a hostile stance toward the weakest neighbour that is no kin, ally or player, and
+    # (spec 15.3, the great power only) a friendly one toward its strongest, so no second front.
+    no_war = world(great={"wars": []})
+    assert pushes(run(no_war)) == [hostile, friendly("strong_enemy")], pushes(run(no_war))
+    # The two pushes are one beat: the same price as one.
+    want = [hostile, friendly("weak_kin")]   # weak_neighbour, the strongest left, is the hostile one
+    # A lesser empire gets the hostile push alone.
+    top = {"name": "top", "regions": 40, "owns": ["r_top"], "subculture": GRN}
+    as_lesser = {"derpy_director_seed": dict(TEST_SEED, ambitious=["top", "great"]),
+                 "derpy_director_empires": {"great": "top"}}
+    c = run(world(great={"wars": [], "regions": 6}, top=top), preload=as_lesser)
+    assert pushes(c) == [hostile], pushes(c)
+    c = run(world(drop=["weak_enemy", "strong_enemy", "weak_kin", "weak_neighbour"],
+                  great={"wars": []}))
+    assert not [x for x in pushes(c) if x[1] == "player"], pushes(c)        # Review Focus 3
+    # A war with a player or another empire is no war next door: the push still comes.
+    c = run(world(drop=["weak_enemy", "strong_enemy"], great={"wars": ["player"]}))
+    assert pushes(c) == want, pushes(c)                                      # Review Focus 3
+    c = run(world(drop=["weak_enemy", "strong_enemy"], great={"wars": ["lesser"]},
+                  lesser={"regions": 1, "owns": ["r_emp"], "subculture": GRN}),
+            preload={"derpy_director_seed": dict(TEST_SEED, ambitious=["great", "lesser"])})
+    assert pushes(c) == want, pushes(c)
+    # Priced from the budget: the push costs 5; with a war next door, nothing is spent.
+    # No kin here, so the merge a great power behind now gets cannot be what is paid for.
+    lone = world(drop=["weak_kin"], great={"wars": []})
+    off = budget(run(lone, mct={"empires": False}))
+    assert pushes(run(lone)) == [hostile, friendly("strong_enemy")], pushes(run(lone))
+    assert budget(run(lone)) == off - 5, (budget(run(lone)), off)
+    lone_war = world(drop=["weak_kin"])
+    assert budget(run(lone_war)) == budget(run(lone_war, mct={"empires": False}))
+    # Every 3 turns: 8 settlements stays behind or far from turn 22 to 31, and is never replaced.
+    c = run(world(great={"regions": 8}), turn=22, until=31)
+    helped = [int(x.split("turn ")[1]) for x in outs(c, "empire great helped")]
+    assert helped == [22, 25, 28, 31], helped
+
+    # Far behind: peace with the weakest stronger enemy that is not the war next door.
+    yes = {"great|strong_enemy": 5, "strong_enemy|great": 5}
+    far = world(great={"regions": 6})
+    c = run(far, scores=yes)
+    assert peace(c) == [("great", "strong_enemy")], peace(c)
+    assert peace(run(far, scores={"great|strong_enemy": 5, "strong_enemy|great": -9})) == []
+    c = run(world(drop=["strong_enemy"], great={"regions": 6, "wars": ["weak_enemy", "player"]},
+                  player={"regions": 9}), scores=yes)
+    assert peace(c) == [], peace(c)                                          # Review Focus 3
+    # Behind (10 of 15), the great power gets peace and kin as if far behind (spec 15.1); a lesser
+    # empire behind (6 of 7.5) gets neither.
+    c = run(world(strong_enemy={"regions": 12}), scores=yes)
+    assert peace(c) == [("great", "strong_enemy")] and merges(c) == [("great", "weak_kin")], c
+    c = run(world(great={"regions": 6}, top=top), scores=yes, preload=as_lesser)
+    assert outs(c, "empire great helped (behind)") and not peace(c) and not merges(c), c
+    # The weakest enemy next door is the war it can win, so no peace with it, however strong.
+    c = run(world(drop=["weak_enemy"], great={"regions": 6}), scores=yes)
+    assert peace(c) == [], peace(c)
+    # Far behind: a weaker kin folds in, and the Chronicle says so.
+    assert merges(c := run(far, scores=yes)) == [("great", "weak_kin")], merges(c)
+    assert ("empire_merge", "great", "weak_kin") in entries(c), entries(c)
+    # Every rule of the merge route holds: a kin it is at war with is refused.
+    c = run(world(great={"regions": 6, "wars": ["weak_enemy", "strong_enemy", "weak_kin"]}),
+            scores=yes)
+    assert merges(c) == [] and outs(c, "great + weak_kin: they are at war"), merges(c)
+    # Only a weaker kin folds in: one with more settlements than the empire is not asked.
+    assert merges(run(world(great={"regions": 6}, weak_kin={"regions": 7}), scores=yes)) == []
+    # At most one every 10 turns: two kin to spare. 13 settlements and a kin of 2 make 15: far behind
+    # on turns 41, 47, 50 and 53, and over half its schedule (14.3) at turn 50's check, so it stays.
+    c = run(world(great={"regions": 13}, weak_kin={"regions": 2},
+                  weak_kin2={"regions": 2, "owns": ["r_kin2"], "subculture": EMP}),
+            turn=41, until=53, scores=yes)
+    mt = [int(x["t"]) for x in _chron(c) if x["k"] == "empire_merge"]
+    assert mt == [41, 53], mt
+    # Ahead of schedule: no help at all.
+    c = run(world(great={"regions": 20, "wars": []}))
+    assert not pushes(c) and not outs(c, "empire great helped"), pushes(c)
+    print("selftest: empires levers ok")
+
+
+def _selftest_empires_great():
+    """39. Spec 15 (2026-11-15, after the first soak found nobody at 50 by turn 80): at each check the
+    largest faction that could be an empire takes the title from a great power short of its goal,
+    and a passive race's great power takes its race's endgame personality, once."""
+    EMP, GRN, SKV = "wh_main_sc_emp_empire", "wh_main_sc_grn_greenskins", "wh2_main_sc_skv_skaven"
+    ev = lambda code, turn: {"event": "Eval", "turn": turn, "code": code}
+    STATE = ("local s = cm:get_saved_value('derpy_director_empires') "
+             "return table.concat(derpy_director:seed().ambitious, ',') .. '|' .. tostring(s.great)"
+             " .. '|' .. tostring(s.graduated[s.great] ~= nil)")
+
+    def world(giant=None, **subs):
+        w = _empire_world(great=20, lesser=10, third=8)
+        if giant is not None:
+            w.append(dict({"name": "giant", "regions": 25, "owns": ["r17"], "subculture": EMP},
+                          **giant))
+        for f in w:
+            if f["name"] in subs:
+                f.update(subs[f["name"]])
+        return w
+
+    def check(w, preload=None, **k):
+        c, _ = _empire_run(w, [ev(STATE, 30), ev(CHRON_DUMP, 30)], preload=preload, start_turn=30,
+                           **k)
+        return evals(c)[0], [(x["k"], x["i"], x.get("n")) for x in _chron(c)
+                             if x["k"] in ("empire", "empire_fade")], c
+    stay = "great,lesser,third|great|false"
+
+    # A non-empire of 25 against a great power of 20: it takes the title and the weakest lesser
+    # empire's place; the old great power is lesser now.
+    state, ent, _ = check(world(giant={}))
+    assert state == "giant,great,lesser|giant|false", state
+    assert ent == [("empire_fade", "third", None), ("empire", "giant", "1")], ent
+    # A tie changes nothing; nor does a newcomer within 6 hops of an empire that stays (r12 is two
+    # from lesser's r10).
+    assert check(world(giant={"regions": 20}))[0] == stay
+    assert check(world(giant={"owns": ["r12"]}))[0] == stay
+    # A faction once an empire is never chosen again, however large.
+    assert check(world(giant={}), preload={"derpy_director_empires": {"chosen": {"giant": 20}}})[0] == stay
+    # A measured runaway is never fed: 60 against 20 is one.
+    state, _, c = check(world(giant={"regions": 60}), quiet_runaway=False)
+    assert state == stay, (state, outs(c, "runaway"))
+    # A graduated lesser empire grown past the great power takes the title and its graduation goes,
+    # since its goal is now 50. No one fades.
+    state, ent, _ = check(world(lesser={"regions": 22}),
+                          preload={"derpy_director_empires": {"graduated": {"lesser": 25}}})
+    assert state == "lesser,great,third|lesser|false", state
+    assert ent == [("empire", "lesser", "1")], ent
+    # A great power at its goal keeps the title, whoever is larger (25: no runaway, so the graduation
+    # is the only thing holding it).
+    state, _, _ = check(world(giant={}),
+                        preload={"derpy_director_empires": {"great": "great",
+                                                            "graduated": {"great": 21}}})
+    assert state == "great,lesser,third|great|true", state
+
+    # The temper: once, for the great power of a passive race; never for a lesser one.
+    tempers = lambda c: [tuple(x[1:3]) for x in c if x[0] == "personality"]
+    c, _ = _empire_run(world(), [ev("return 1", 5)])
+    assert tempers(c) == [("great", "wh3_combi_empire_endgame")], tempers(c)
+    c, _ = _empire_run(world(great={"subculture": GRN}, lesser={"subculture": SKV}), [ev("return 1", 5)])
+    assert tempers(c) == [], tempers(c)
+    # A promoted Skaven newcomer takes the Skaven one at the check; the Greenskin it replaced, none.
+    _, _, c = check(world(giant={"subculture": SKV}, great={"subculture": GRN}))
+    assert tempers(c) == [("giant", "wh3_combi_skaven_endgame")], tempers(c)
+    # The Empires switch off: no personality is ever changed.
+    c, _ = _empire_run(world(), [ev("return 1", 5)], mct={"empires": False})
+    assert tempers(c) == [], tempers(c)
+    print("selftest: empires great power ok")
+
+
+def _selftest_empires_pace():
+    """40. Spec 16 (2026-11-15, after the 100-turn soak): the great power's pace, by script alone.
+    It holds a raised potential (CA's own rival lever) while it holds the title, handed back when
+    the title moves; and it storms a settlement it besieges when its army is at least 1.5 times the
+    garrison's, as CA's turn-one openings do, never a player's and for the budget's mood price."""
+    EMP = "wh_main_sc_emp_empire"
+    ev = lambda code, turn: {"event": "Eval", "turn": turn, "code": code}
+    pots = lambda c: [tuple(x[1:4]) for x in c if x[0] == "potential"]
+    BUDGET = "return tostring(cm:get_saved_value('derpy_director_budget'))"
+
+    # The potential: once while it holds the title, not every turn.
+    c, _ = _empire_run(_empire_world(), [ev("return 1", 5)])
+    assert pots(c) == [("great", "true", "750")], pots(c)
+    # The title moves at the check: the old holder's is handed back, then the new one's raised.
+    w = _empire_world(great=20, lesser=10, third=8) + [
+        {"name": "giant", "regions": 25, "owns": ["r17"], "subculture": EMP}]
+    c, _ = _empire_run(w, [ev("return 1", 31)], start_turn=29)
+    assert pots(c) == [("great", "true", "750"), ("great", "false", "0"),
+                       ("giant", "true", "750")], pots(c)
+    c, _ = _empire_run(_empire_world(), [ev("return 1", 5)], mct={"empires": False})
+    assert pots(c) == [], pots(c)
+    # Switched off mid-campaign: the raised potential is handed back, once.
+    c, _ = _empire_run(_empire_world(), [ev("return 1", 5)], mct={"empires": False},
+                       preload={"derpy_director_empires": {"great": "great", "potential": "great"}})
+    assert pots(c) == [("great", "false", "0")], pots(c)
+
+    # The sieges.
+    world = _empire_world() + [
+        {"name": "victim", "regions": 2, "owns": ["r12"], "subculture": EMP}]
+    for f in world:
+        if f["name"] == "player":
+            f["owns"] = ["r13"]
+
+    def siege(who="great", where="r12", strength=3000, garrison=1000, **k):
+        e = {"event": "CharacterBesiegesSettlement", "instigator": who, "region": where,
+             "turn": 5, "strength": strength, "garrison": garrison}
+        c, _ = _empire_run(world, [e, ev(BUDGET, 5)], **k)
+        return [tuple(x[1:3]) for x in c if x[0] == "attack_region"], int(evals(c)[-1]), c
+    attacks, spent, c = siege()
+    assert attacks == [("character_cqi:77", "r12")], (attacks, outs(c, "siege"))
+    # Free (2026-11-16): soak 3 left three sieges at good odds unpressed on an empty budget.
+    assert spent == siege(strength=1400)[1], (spent, siege(strength=1400)[1])
+    assert siege(strength=1400)[0] == []                 # under 1.5 times the garrison
+    assert siege(strength=1500)[0] == [("character_cqi:77", "r12")]   # exactly 1.5 storms
+    assert siege(garrison=None)[0] == [("character_cqi:77", "r12")]   # no garrison army
+    assert siege(who="lesser")[0] == [("character_cqi:77", "r12")]    # every empire storms
+    assert siege(who="victim", where="r1")[0] == []      # nobody else does
+    assert siege(where="r13")[0] == []                   # a player's town: never
+    assert siege(strength=None)[0] == []                 # no army, no assault
+    assert siege(mct={"empires": False})[0] == []
+    print("selftest: empires pace ok")
+
+
+def _selftest_empires_cheats():
+    """38. Phase 4: the optional cheats (spec 6b). Off by default; Generous pays an empire far
+    behind 5,000 gold, Relentless also copies its largest army without the general and settles one
+    ruin next to it. Once every 5 turns, never in multiplayer, free, and never chronicled."""
+    EMP = "wh_main_sc_emp_empire"
+    regions = [{"key": "r_home", "adj": ["r_owned", "r_ruin"]},
+               {"key": "r_owned", "adj": ["r_home"]},
+               {"key": "r_ruin", "adj": ["r_home"], "abandoned": True}]
+    # Nobody here could replace the empire: a rebel and a player.
+    world = lambda n: [{"name": "great", "regions": n, "owns": ["r_home"], "subculture": EMP,
+                        "armies": [["lord_b", "u3"], ["lord_a", "u1", "u2"]]},
+                       {"name": "rebels_x", "regions": 1, "owns": ["r_owned"], "rebel": True},
+                       {"name": "player", "regions": 3, "human": True, "subculture": EMP}]
+    BUDGET = "return tostring(cm:get_saved_value('derpy_director_budget'))"
+
+    # Turn 31: expected 15, so 6 settlements is far behind and 10 only behind.
+    def run(level=None, n=6, turn=31, until=None, **k):
+        mct = dict({"empire_goal_turn": 80}, **({"empire_help": level} if level else {}))
+        evs = [{"event": "Eval", "turn": until or turn, "code": BUDGET},
+               {"event": "Eval", "turn": until or turn, "code": CHRON_DUMP}]
+        c, _ = run_lua(world(n), events=evs, regions_spec=regions, start_turn=turn, mct=mct,
+                       preload={"derpy_director_seed": dict(TEST_SEED, ambitious=["great"])}, **k)
+        return c
+    gold = lambda c: [tuple(x[1:3]) for x in c if x[0] == "treasury_mod"]
+    armies = lambda c: [tuple(x[1:4]) for x in c if x[0] == "create_force"]
+    ruins = lambda c: [tuple(x[1:3]) for x in c if x[0] == "transfer_region_to_faction"]
+    cheats = lambda c: gold(c) + armies(c) + ruins(c)
+    budget = lambda c: evals(c)[0]
+
+    natural = run()
+    assert not cheats(natural), cheats(natural)
+    generous = run("generous")
+    assert gold(generous) == [("great", "5000")] and not armies(generous), cheats(generous)
+    assert budget(generous) == budget(natural), (budget(generous), budget(natural))   # free
+    assert gold(run("generous", n=10)) == []                                         # far only
+    # Every 5 turns (2026-11-16, was 10): 6 settlements is far behind from turn 25 to 40.
+    c = run("generous", turn=25, until=40)
+    assert [int(x.split("turn ")[1].split(":")[0]) for x in outs(c, "empire great cheat")] == \
+        [25, 30, 35, 40], outs(c, "empire great cheat")
+    relentless = run("relentless")
+    assert armies(relentless) == [("great", "u1,u2", "r_home")], armies(relentless)
+    assert ruins(relentless) == [("r_ruin", "great")], ruins(relentless)
+    assert _chron(relentless) == _chron(natural), (_chron(relentless), _chron(natural))
+    assert not cheats(run("relentless", multiplayer=True))                           # Review Focus 4
+    print("selftest: empires cheats ok")
 
 
 CA_EPISODES = os.path.join(ROOT, "Modding Files", "reference", "ca_scripts_wh3", "campaign",
@@ -3262,6 +3976,10 @@ def _selftest_mct():
     want = {o["key"]: (o["kind"], o["default"]) for o in MCT_OPTIONS}
     want.update({"race_" + sc: ("checkbox", True) for sc in races})
     assert reg == want, set(reg) ^ set(want)
+    assert reg["empire_help"] == ("dropdown", "natural"), reg["empire_help"]
+    # 50 by turn 50 (author, 2026-11-16): at 80 the great power counted as ahead on turn 30.
+    assert reg["empire_goal_turn"] == ("slider", 50), reg["empire_goal_turn"]
+    assert 'add_dropdown_value("relentless", "Relentless"' in page, "the dropdown has no Relentless"
     w = [{"name": "a", "regions": 1, "subculture": "wh_main_sc_dwf_dwarfs"}]
     ev = lambda k: [{"event": "Eval", "code": "return derpy_director:setting(%r)" % k}]
     get = lambda calls: evals(calls)
@@ -3334,9 +4052,11 @@ def _selftest_long_run(CHD, DWF, regions, pair_world, ev2, yes):
 
     # A feud's grudge is remembered for 50 turns, CA's falloff, then the feud can earn another.
     seen = "derpy_director_seen_sacker_victim"
+    # Empires off: from turn 20 the 20-settlement sacker would be a great power behind its
+    # schedule, sheltered from the grudge this measures.
     def feud(turns, preload=None):
         c, _ = run_lua(pair_world, events=[dict(ev2[0], turn=t) for t in turns],
-                       regions_spec=regions, preload=preload or {})
+                       regions_spec=regions, preload=preload or {}, mct={"empires": False})
         return c
     c = feud([1, 50])
     assert len(grudges(c)) == 1 and outs(c, "grudge from turn 1 is still remembered"), c

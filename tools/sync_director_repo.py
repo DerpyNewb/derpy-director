@@ -71,6 +71,7 @@ DESIGN = [
     "specs/2026-09-16-ai-director-design.md", "plans/2026-09-16-ai-director-phase1.md",
     "specs/2026-11-14-director-merges-coalitions-design.md", "plans/2026-11-14-director-merges-coalitions.md",
     "specs/2026-11-15-director-chronicle-design.md", "plans/2026-11-15-director-chronicle.md",
+    "specs/2026-11-15-director-empires-design.md", "plans/2026-11-15-director-empires.md",
 ]
 HISTORY = ["HANDOFF_20260913_AI_GAPS_AND_COALITIONS.md", "HANDOFF_20260913_AI_COALITION_SUPERVISOR_BUILT.md",
            "HANDOFF_20260916_COALITION_SOAK_AND_AI_DIRECTOR_RESEARCH.md",

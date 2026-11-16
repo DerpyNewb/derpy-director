@@ -36,8 +36,18 @@ design record.
   the Chronicle already records, the war is listed with its cause: "Karak Hirn declared war on Clan Mors over the
   sack of Karak Azul." Above the list it names the campaign's temperament, its old hatred and its ambitious
   factions. With another of Derpy's mods that uses the shared button hub, the Chronicle's button joins the hub.
-- **Settings.** An MCT (Mod Configuration Tool) page with 34 options: each trigger, the cost, the per-turn limit, the
-  first turn, and a switch per race. Multiplayer always uses the defaults, so two players cannot fall out of step.
+- **Empires.** Each campaign, three computer factions set out to build empires: a great power aiming for 50
+  settlements by turn 50 on Immortal Empires and two lesser ones for 25. When one falls behind, the Director helps
+  it by script alone: peace on a losing front, kin who join it, a hostile stance towards its weakest neighbour,
+  an endgame personality, and a raised faction potential for the great power. Every siege an empire lays is stormed
+  at once when its army has 1.5 times the garrison's strength; in one 50-turn test, 33 of 39 such assaults took the
+  town. A dead or stalled empire is replaced, and the great power's title passes to the strongest. The best test so
+  far ended turn 50 with the great power on 35 settlements, the largest computer faction by 13; none has reached 50
+  yet.
+- **Optional cheats.** Off by default. In MCT, Generous pays an empire far behind 5,000 gold, and Relentless also
+  gives it a copy of its largest army and an abandoned settlement next to its land, at most once every 5 turns.
+- **Settings.** An MCT (Mod Configuration Tool) page with 39 options: each trigger, the cost, the per-turn limit, the
+  first turn, the empires and their goals, and a switch per race. Multiplayer always uses the defaults, so two players cannot fall out of step.
 - **Works with Derpy's other mods when they are installed**, with no edit to them: Resource Overhaul's seized
   convoys become situations, kin-slaying costs Great Guilds temple Reputation, and Iron Court secessions become
   situations.

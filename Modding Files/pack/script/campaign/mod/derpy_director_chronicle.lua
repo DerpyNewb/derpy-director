@@ -164,6 +164,18 @@ function DC.sentence(e)
 		add(DC.WAR[e.w], {i = I, v = V, r = R, x = DC.faction(e.x)})
 	elseif e.k == "runaway_pact" then
 		for _, p in ipairs(e.p or {}) do add("runaway_pact", {a = DC.faction(p[1]), b = DC.faction(p[2]), i = I}) end
+	-- The empires (2026-11-15): n = 1 is the great power, as g = 1 is its goal.
+	elseif e.k == "empire" then
+		if e.n == 1 then add("empire_great", {i = I}) else add("empire_lesser", {i = I}) end
+	elseif e.k == "empire_fade" then
+		add("empire_fade", {i = I})
+	elseif e.k == "empire_goal" then
+		local vals = {i = I, n = tostring(e.n)}
+		if e.g == 1 then add("empire_goal_great", vals) else add("empire_goal_lesser", vals) end
+	elseif e.k == "empire_merge" then
+		add("empire_merge", {i = I, v = V})
+	elseif e.k == "empire_peace" then
+		add("empire_peace", {i = I, v = V})
 	elseif DC.DEED[e.k] then
 		add(DC.DEED[e.k], {i = I, v = V, r = R})
 		if e.c and #e.c > 0 then
