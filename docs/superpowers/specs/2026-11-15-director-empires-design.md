@@ -433,3 +433,48 @@ Avelorn on turn 50 with 29; Avelorn got three cheats against soak 4's two and en
 AI faction on turn 50: 30, against soak 4's 35. One run's spread decides more than the cadence
 does. A great power on an island (Avelorn on Ulthuan) gets its army copies at its capital, far
 from anything left to take. No Director error.
+
+**4. Relentless is hidden (2026-11-16, author: "apply and test it out during a soak").** Relentless no
+longer copies an army or hands over a ruin, since both are visible. Instead an empire behind
+schedule runs a hidden economy, the way CA's own AI background bonuses do (`wh3_campaign_ai.lua`
+1012): a runtime bundle on `wh_main_bundle_dummy` with upkeep -30%, recruitment cost -30%, income
++30%, construction cost -30%, replenishment +10% and one more recruitment slot per army, all in
+`unseen` scopes. It is taken away when the empire catches up, loses its place, or the setting or
+the Empires switch goes off. Under Relentless an empire's kin merges have no 10-turn wait, no
+per-turn limit and no price; a last stand still pays.
+
+**Soak 6 (turns 1 to 50, same roll).** The bundle was on the Wood Elves with all six effects by
+turn 15. Noctilus (Vampire Coast, which the game never lets confederate) took the title on turn 20
+and ended on 28 of 50 with 20 armies; the Oracles of Tzeentch, a lesser empire, ended on 16 with
+16 armies and 313,515 gold unspent. More money and armies did not become more settlements: the AI
+hoards gold, and its conquest rate is not bound by what it can afford. 47 sieges pressed, 1 held.
+
+## 18. Better picks and the stall rule (amendments, 2026-11-16 and 2026-11-17)
+
+**1. Better picks (author: "better picks first").** An empire grows fastest by taking in its kin, so
+a good pick is a faction whose race may confederate under computer control (in
+`derpy_director_merge_races`, switched on in MCT, and not Vampire Counts, Vampire Coast or Chaos
+Dwarfs, which the game refuses) with at least two living computer kin. The dead, players, rebels,
+vassals and invaders are no kin. The roll draws good picks first and the great power is the largest
+of them; a faction taking the title as a newcomer must be one.
+
+**Soak 7 (turns 1 to 50).** The Great Orthodoxy (Kislev, seven kin), Yvresse and Tlaqua; the
+Orthodoxy had 15 on turn 25, the best turn 25 then. It was faded on turn 40 for a smaller faction,
+grew on alone and ended as the largest computer faction on 25.
+
+**2. A stalled empire gives way only to a larger faction (author: "make the fix").** Soak 8, same
+roll: the Orthodoxy was again faded on turn 40, this time for Schwartzhafen (Vampire Counts, no kin,
+20 against about 17), and again ended as the largest computer faction, on 28, the great power on 27.
+
+**3. ...only to a larger good pick, and never the largest empire (author, 2026-11-17: "do both").**
+The largest empire is never faded for stalling; a stalled empire that is the largest computer
+faction is the largest empire, so that case needs no check of its own. Ties protect both. A dead
+empire's place still goes to the fastest grower, good picks first, because an empty place helps
+nobody.
+
+**Soak 9 (turns 1 to 50, same roll).** The Orthodoxy had 17 on turn 25 and kept the title all game,
+ending on 30 of 50, the largest faction on the map, with 18 armies and 459,256 gold unspent. It took
+in the Ice Court and Ropsmenn and has no kin left. Tlaqua gave way to Clan Mors on turn 30 (17 on
+turn 50) and Yvresse, after taking in Saphery and Ellyrion, to Sayl on turn 40 (22). 36 sieges
+pressed, 1 held. No Director error. What holds it back now is conquest: the kin lever is spent and
+the gold is not spent.

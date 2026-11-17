@@ -374,28 +374,39 @@ function derpy_director:roll_hot_grudge()
 	return pairs_list[cm:random_number(#pairs_list, 1)]
 end
 
--- The empires: drawn at random from the factions a player could have picked, then from the rest
--- only if too few are left, each capital clear of the others'. Most settlements first, so the
--- first is the great power.
+-- The empires: drawn at random from the factions a player could have picked that are good picks
+-- (2026-11-16), then from the rest of those, then from everyone else only if too few are left,
+-- each capital clear of the others'. Good picks first, most settlements first among them, so the
+-- great power is the largest good pick.
 function derpy_director:roll_ambitious()
-	local strict, loose = {}, {}
+	local good, strict, loose, is_good = {}, {}, {}, {}
 	for _, f in model_pairs(cm:model():world():faction_list()) do
 		if self:empire_candidate(f, true) then
-			strict[#strict + 1] = f:name()
+			is_good[f:name()] = self:good_pick(f)
+			local pool = is_good[f:name()] and good or strict
+			pool[#pool + 1] = f:name()
 		elseif self:empire_candidate(f, false) then
 			loose[#loose + 1] = f:name()
 		end
 	end
+	table.sort(good)
 	table.sort(strict)
 	table.sort(loose)
 	local chosen = {}
-	for _, pool in ipairs({strict, loose}) do
+	for _, pool in ipairs({good, strict, loose}) do
 		while #chosen < AMBITIOUS_COUNT and #pool > 0 do
 			local key = table.remove(pool, cm:random_number(#pool, 1))
 			if self:spread_ok(key, chosen) then chosen[#chosen + 1] = key end
 		end
 	end
-	return self:by_size(chosen)
+	self:by_size(chosen)
+	-- by_size has sorted on size and key; a stable pass puts the good picks in front.
+	local front, back = {}, {}
+	for _, k in ipairs(chosen) do
+		if is_good[k] then front[#front + 1] = k else back[#back + 1] = k end
+	end
+	for _, k in ipairs(back) do front[#front + 1] = k end
+	return front
 end
 
 -- The temperament, named to every player at the start: variety a player cannot see is no variety.
@@ -1111,6 +1122,38 @@ function derpy_director:by_size(keys)
 	return keys
 end
 
+-- Better picks (2026-11-16). In six soaks the empires that grew took in their kin, and the ones
+-- that could not stalled. A good pick's race may confederate under computer control and it has
+-- GOOD_PICK_KIN living computer kin. The game refuses these races' computer confederations
+-- whatever its tables say (measured live 2026-11-14, every quick-deal probe false).
+local AI_NEVER_CONFEDERATES = {
+	["wh_main_sc_vmp_vampire_counts"] = true,
+	["wh2_dlc11_sc_cst_vampire_coast"] = true,
+	[CHD_SC] = true,
+}
+local GOOD_PICK_KIN = 2
+
+-- Living computer kin f could one day take in, or 0 when its race may never be merged.
+function derpy_director:kin_count(f)
+	local sc = f:subculture()
+	local races = derpy_director_merge_races
+	if AI_NEVER_CONFEDERATES[sc] or not (races and races[sc]) or not self:setting("race_" .. sc) then
+		return 0
+	end
+	local n = 0
+	for _, o in model_pairs(cm:model():world():faction_list()) do
+		if o:name() ~= f:name() and not o:is_dead() and not o:is_human() and not o:is_rebel()
+			and not o:is_vassal() and not self:is_invader(o) and o:subculture() == sc then
+			n = n + 1
+		end
+	end
+	return n
+end
+
+function derpy_director:good_pick(f)
+	return self:kin_count(f) >= GOOD_PICK_KIN
+end
+
 -- The goals are set for vanilla Immortal Empires, whose region list counts this many regions in
 -- game (measured 2026-11-15; campaign_map_regions holds 644 rows for the map, so the DB count is
 -- not the one to use). A smaller map scales every goal down.
@@ -1146,7 +1189,7 @@ end
 function derpy_director:empires()
 	local st = cm:get_saved_value("derpy_director_empires")
 	if type(st) ~= "table" then st = {} end
-	for _, field in ipairs({"graduated", "chosen", "help", "merged", "cheat", "temper"}) do
+	for _, field in ipairs({"graduated", "chosen", "help", "merged", "cheat", "temper", "bonus"}) do
 		if type(st[field]) ~= "table" then st[field] = {} end
 	end
 	local s = self:seed()
@@ -1249,8 +1292,9 @@ function derpy_director:graduate(key, st, turn, n)
 end
 
 -- The candidate that grew most since the oldest snapshot (ties: more settlements, then key), never
--- an empire before, its capital clear of others'. Players' choices first, then the rest.
-function derpy_director:empire_grower(st, others)
+-- an empire before, its capital clear of others'. Players' choices first, then the rest. above:
+-- only a good pick holding more settlements than this (the replacement for a stalled empire).
+function derpy_director:empire_grower(st, others, above)
 	local base = st.snaps[1] and st.snaps[1].n or {}
 	for _, strict in ipairs({true, false}) do
 		local pool = {}
@@ -1259,10 +1303,15 @@ function derpy_director:empire_grower(st, others)
 			if not st.chosen[k] and self:empire_candidate(f, true) == strict
 				and self:empire_candidate(f, false) then
 				local n = f:region_list():num_items()
-				pool[#pool + 1] = {k = k, n = n, gain = n - (base[k] or 0)}
+				local good = self:good_pick(f)
+				if n > (above or -1) and (good or not above) then
+					pool[#pool + 1] = {k = k, n = n, gain = n - (base[k] or 0), g = good and 1 or 0}
+				end
 			end
 		end
+		-- A good pick first (2026-11-16), then the fastest grower.
 		table.sort(pool, function(a, b)
+			if a.g ~= b.g then return a.g > b.g end
 			if a.gain ~= b.gain then return a.gain > b.gain end
 			if a.n ~= b.n then return a.n > b.n end
 			return a.k < b.k
@@ -1274,11 +1323,20 @@ function derpy_director:empire_grower(st, others)
 	return nil
 end
 
--- A dead empire fades; one under EMPIRE_STALLED of its schedule fades only if a grower takes its
--- place. A graduate is never replaced. Empty places are filled after.
+-- A dead empire fades; one under EMPIRE_STALLED of its schedule fades only if a grower already
+-- larger than it takes its place (2026-11-16: on the 50-by-turn-50 schedule soak 7 dropped the
+-- largest AI faction for a smaller one, and the title churned down). A graduate is never
+-- replaced. Empty places are filled after.
 function derpy_director:empire_check(st, turn)
 	local s = self:seed()
 	local keep, stalled, fades, picks = {}, {}, {}, {}
+	-- The largest empire never fades for stalling (2026-11-17: soaks 7 and 8 both dropped the
+	-- Kislev empire at turn 40 and it ended as the largest computer faction both times).
+	local top = 0
+	for _, k in ipairs(s.ambitious) do
+		local f = alive(k)
+		if f and f:region_list():num_items() > top then top = f:region_list():num_items() end
+	end
 	for _, k in ipairs(s.ambitious) do
 		local f = alive(k)
 		if st.graduated[k] then
@@ -1287,7 +1345,8 @@ function derpy_director:empire_check(st, turn)
 			fades[#fades + 1] = k
 		else
 			keep[#keep + 1] = k
-			if f:region_list():num_items() < EMPIRE_STALLED * self:expected(k, turn, st) then
+			local n = f:region_list():num_items()
+			if n < top and n < EMPIRE_STALLED * self:expected(k, turn, st) then
 				stalled[#stalled + 1] = k
 			end
 		end
@@ -1297,7 +1356,7 @@ function derpy_director:empire_check(st, turn)
 		for _, o in ipairs(keep) do
 			if o ~= k then others[#others + 1] = o end
 		end
-		local pick = self:empire_grower(st, others)
+		local pick = self:empire_grower(st, others, alive(k):region_list():num_items())
 		if pick then
 			for i, o in ipairs(keep) do
 				if o == k then keep[i] = pick end
@@ -1346,8 +1405,9 @@ function derpy_director:promote(st, turn)
 	for _, f in model_pairs(cm:model():world():faction_list()) do
 		local k = f:name()
 		local n = f:region_list():num_items()
+		-- A newcomer must be a good pick (2026-11-16); an empire already is one or was chosen anyway.
 		if n > floor_n and not blocked[k] and not f:is_dead() and (self:is_ambitious(k)
-			or (not st.chosen[k] and self:empire_candidate(f, true))) then
+			or (not st.chosen[k] and self:empire_candidate(f, true) and self:good_pick(f))) then
 			pool[#pool + 1] = {k = k, n = n}
 		end
 	end
@@ -1550,8 +1610,11 @@ end
 
 -- Far behind: a weaker kin it has met folds in, by the merge route's own rules, one every
 -- EMPIRE_MERGE_EVERY turns, through merge_first like every other merge.
+-- Relentless lifts the wait (2026-11-16); merge_first then lifts the turn's limit and the price.
+-- A confederation is the one cheat the player already sees the AI do on its own.
 function derpy_director:empire_merge(key, st, turn)
-	if turn - (st.merged[key] or -99) < EMPIRE_MERGE_EVERY then return nil end
+	if self:setting("empire_help") ~= "relentless"
+		and turn - (st.merged[key] or -99) < EMPIRE_MERGE_EVERY then return nil end
 	local f = alive(key)
 	if not f then return nil end
 	local merged = self:merge_first(key, function()
@@ -1626,60 +1689,61 @@ function derpy_director:empire_cheats(key, st, turn)
 	st.cheat[key] = turn
 	cm:treasury_mod(key, EMPIRE_GOLD)
 	log(string.format("empire %s cheat turn %d: %s, %d gold", key, turn, level, EMPIRE_GOLD))
-	if level ~= "relentless" then return end
-	self:cheat_army(key)
-	self:cheat_ruin(key)
 end
 
--- A copy of its largest army at its capital: the same units without the general, item 0, as CA's
--- own scripts skip it. create_force puts a generic general at its head.
-function derpy_director:cheat_army(key)
-	local f = alive(key)
-	local home = f and f:home_region()
-	if not home or home:is_null_interface() then return end
-	local best, best_n = nil, 0
-	for _, mf in model_pairs(f:military_force_list(true)) do
-		if mf:has_general() and not mf:is_armed_citizenry() and mf:unit_list():num_items() > best_n then
-			best, best_n = mf, mf:unit_list():num_items()
-		end
-	end
-	if not best then return end
-	local units = {}
-	for i = 1, best_n - 1 do units[#units + 1] = best:unit_list():item_at(i):unit_key() end
-	if #units == 0 then return end
-	local x, y = cm:find_valid_spawn_location_for_character_from_settlement(key, home:name(), false,
-		true, 5)
-	if x == -1 then
-		log("empire " .. key .. " cheat army: no room at " .. home:name())
-		return
-	end
-	cm:create_force(key, table.concat(units, ","), home:name(), x, y, true)
-	log(string.format("empire %s cheat army: %d units at %s", key, #units, home:name()))
-end
+-- Relentless (2026-11-16): nothing the player can see. The army copy and the free ruin are gone;
+-- instead an empire behind schedule runs a hidden economy, the way CA's own AI background bonuses
+-- do (wh3_campaign_ai.lua:1012): a runtime bundle on wh_main_bundle_dummy, an empty, untitled
+-- vanilla record no CA script applies, with "unseen" scopes only. Economy only, never a unit stat,
+-- since a stat bonus names its source in the unit's tooltip. Taken away once the empire catches up,
+-- loses its place, or the setting or the Empires switch goes off.
+local BONUS_BASE = "wh_main_bundle_dummy"
+local BONUS_EFFECTS = {
+	{"wh_main_effect_force_all_campaign_upkeep", "faction_to_force_own_unseen", -30},
+	{"wh_main_effect_force_all_campaign_recruitment_cost_all", "faction_to_force_own_unseen", -30},
+	{"wh_main_effect_economy_gdp_mod_all", "faction_to_region_own_unseen", 30},
+	{"wh_main_effect_building_construction_cost_mod", "faction_to_region_own_unseen", -30},
+	{"wh_main_effect_force_all_campaign_replenishment_rate", "faction_to_force_own_unseen", 10},
+	{"wh_main_effect_force_army_campaign_recruitment_points", "faction_to_faction_own_unseen", 1},
+}
 
--- The abandoned settlement next to its land with the lowest key. A ruin has no owner, so no player
--- ever loses one.
-function derpy_director:cheat_ruin(key)
-	local f = alive(key)
-	if not f then return end
-	local best
-	for _, r in model_pairs(f:region_list()) do
-		for _, adj in model_pairs(r:adjacent_region_list()) do
-			if adj:is_abandoned() and (not best or adj:name() < best) then best = adj:name() end
+-- want: {key = true} for the empires that should hold the bonus now; everyone else loses it.
+function derpy_director:empire_bonus(st, turn, want)
+	if type(st.bonus) ~= "table" then st.bonus = {} end
+	local held = {}
+	for k in pairs(st.bonus) do held[#held + 1] = k end
+	table.sort(held)
+	for _, k in ipairs(held) do
+		if not want[k] then
+			if alive(k) then cm:remove_effect_bundle(BONUS_BASE, k) end
+			st.bonus[k] = nil
+			log(string.format("empire %s hidden bonus off turn %d", k, turn))
 		end
 	end
-	if not best then return end
-	cm:transfer_region_to_faction(best, key)
-	log("empire " .. key .. " cheat ruin: " .. best)
+	for _, k in ipairs(self:seed() and self:seed().ambitious or {}) do
+		local f = want[k] and not st.bonus[k] and alive(k)
+		if f then
+			local b = cm:create_new_custom_effect_bundle(BONUS_BASE)
+			if b and not b:is_null_interface() then
+				for _, e in ipairs(BONUS_EFFECTS) do b:add_effect(e[1], e[2], e[3]) end
+				b:set_duration(0)
+				cm:apply_custom_effect_bundle_to_faction(b, f)
+				st.bonus[k] = turn
+				log(string.format("empire %s hidden bonus on turn %d", k, turn))
+			end
+		end
+	end
 end
 
 -- Once a turn, from the WorldStartRound listener.
 function derpy_director:empire_turn()
 	if not self:setting("empires") then
-		-- Switched off mid-campaign: hand back a raised potential, and write nothing else.
+		-- Switched off mid-campaign: hand back a raised potential and a hidden bonus, and write
+		-- nothing else.
 		local saved = cm:get_saved_value("derpy_director_empires")
-		if type(saved) == "table" and saved.potential then
+		if type(saved) == "table" and (saved.potential or next(saved.bonus or {})) then
 			self:release_potential(saved)
+			self:empire_bonus(saved, cm:model():turn_number(), {})
 			cm:set_saved_value("derpy_director_empires", saved)
 		end
 		return
@@ -1701,6 +1765,8 @@ function derpy_director:empire_turn()
 	end
 	self:temper(st, turn)
 	self:pace(st)
+	local relentless = self:setting("empire_help") == "relentless"
+	local want = {}
 	for _, k in ipairs(self:seed().ambitious) do
 		local band = self:empire_band(k, turn)
 		if (band == "behind" or band == "far") and turn - (st.help[k] or -99) >= HELP_EVERY then
@@ -1709,7 +1775,11 @@ function derpy_director:empire_turn()
 		if band == "far" and turn - (st.cheat[k] or -99) >= CHEAT_EVERY then
 			self:empire_cheats(k, st, turn)
 		end
+		-- Read after the help: a merge this turn may already have caught it up.
+		band = self:empire_band(k, turn)
+		if relentless and (band == "behind" or band == "far") then want[k] = true end
 	end
+	self:empire_bonus(st, turn, want)
 	cm:set_saved_value("derpy_director_empires", st)
 end
 
@@ -1893,14 +1963,16 @@ end
 -- cost no kin scan.
 function derpy_director:merge_first(who, candidates, sit, mode)
 	local turn = cm:model():turn_number()
-	local price = self:setting("merge_price") or 60
+	-- An empire's merge under Relentless: no per-turn limit and no price.
+	local free = mode == "empire" and self:setting("empire_help") == "relentless"
+	local price = free and 0 or (self:setting("merge_price") or 60)
 	local why
 	if turn < (self:setting("merge_from_turn") or 10) then
 		-- A dozen last stands a turn is normal before the first merge turn: said once a turn.
 		if self.too_early_turn == turn then return nil end
 		self.too_early_turn = turn
 		why = "too early"
-	elseif merge_count(turn) >= (self:setting("merges_per_turn") or 1) then
+	elseif not free and merge_count(turn) >= (self:setting("merges_per_turn") or 1) then
 		why = "this turn's confederations are spent"
 	elseif self:budget() < price then
 		why = string.format("budget %d cannot pay %d", self:budget(), price)

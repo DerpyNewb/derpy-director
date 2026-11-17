@@ -41,11 +41,14 @@ design record.
   it by script alone: peace on a losing front, kin who join it, a hostile stance towards its weakest neighbour,
   an endgame personality, and a raised faction potential for the great power. Every siege an empire lays is stormed
   at once when its army has 1.5 times the garrison's strength; in one 50-turn test, 33 of 39 such assaults took the
-  town. A dead or stalled empire is replaced, and the great power's title passes to the strongest. The best test so
-  far ended turn 50 with the great power on 35 settlements, the largest computer faction by 13; none has reached 50
-  yet.
-- **Optional cheats.** Off by default. In MCT, Generous pays an empire far behind 5,000 gold, and Relentless also
-  gives it a copy of its largest army and an abandoned settlement next to its land, at most once every 5 turns.
+  town. The empires are chosen from races the game lets join with their kin, each with at least two kin still alive.
+  A dead empire is replaced. A stalled one gives way only to a larger faction that could also take in its kin, and
+  never while it is the largest empire. The great power's title passes to the strongest. In the latest 50-turn test
+  the great power kept its title all game and ended on 30 settlements, the largest faction on the map; none has
+  reached 50 yet.
+- **Optional cheats.** Off by default. In MCT, Generous pays an empire far behind 5,000 gold, at most once every 5
+  turns. Relentless does that too, and while an empire is behind it also quietly pays less to raise and keep its
+  armies and to build, earns more, and can join with its kin with no wait and no cost.
 - **Settings.** An MCT (Mod Configuration Tool) page with 39 options: each trigger, the cost, the per-turn limit, the
   first turn, the empires and their goals, and a switch per race. Multiplayer always uses the defaults, so two players cannot fall out of step.
 - **Works with Derpy's other mods when they are installed**, with no edit to them: Resource Overhaul's seized

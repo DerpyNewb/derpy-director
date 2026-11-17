@@ -137,7 +137,7 @@ o15:set_text("Empire help")
 o15:set_tooltip_text("How far the Director goes for an empire that falls far behind. Multiplayer always uses Natural.")
 o15:add_dropdown_value("natural", "Natural", "Only what the world itself could manage: a war to win, a neighbour to fight, peace on a losing front and kin who join it. Every settlement it gains, it takes itself.", true)
 o15:add_dropdown_value("generous", "Generous", "As Natural, and an empire far behind is also paid 5,000 gold, at most once every 5 turns.", false)
-o15:add_dropdown_value("relentless", "Relentless", "As Generous, and it is also given a copy of its largest army at its capital and one abandoned settlement next to its land.", false)
+o15:add_dropdown_value("relentless", "Relentless", "As Generous, and an empire that falls behind also quietly pays less to raise and keep its armies and to build, earns more, and can join with its kin far more often.", false)
 o15:set_default_value("natural")
 o15:set_assigned_section("empires")
 

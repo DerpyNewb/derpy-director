@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-11-17, better empires
+
+- The empires are now chosen from races the game lets confederate under computer control, each with at least two
+  living kin, so they can grow by taking in their own kind. Vampire Counts, Vampire Coast and Chaos Dwarfs never
+  qualify. A newcomer taking the great power's title must qualify too.
+- A stalled empire is replaced only by a larger faction that qualifies, and the largest empire is never replaced for
+  stalling. In testing, the old rule twice dropped the empire that went on to become the largest computer faction.
+- Relentless no longer gives an army copy or an abandoned settlement, since both were easy to spot. Instead, while an
+  empire is behind schedule, it pays 30% less upkeep, recruitment and construction, earns 30% more, replenishes faster
+  and gets one more recruitment slot per army, all hidden. Its kin merges have no wait, no per-turn limit and no cost.
+
 ## 2026-11-16, empires
 
 - New: three computer factions a campaign set out to build empires, a great power aiming for 50 settlements by turn

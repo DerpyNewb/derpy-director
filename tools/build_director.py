@@ -384,8 +384,8 @@ MCT_OPTIONS = [
           "As Natural, and an empire far behind is also paid 5,000 gold, at most once every "
           "5 turns."),
          ("relentless", "Relentless",
-          "As Generous, and it is also given a copy of its largest army at its capital and one "
-          "abandoned settlement next to its land."),
+          "As Generous, and an empire that falls behind also quietly pays less to raise and keep "
+          "its armies and to build, earns more, and can join with its kin far more often."),
      ]},
 ]
 RACE_TOOLTIP = ("Whether the Director may confederate factions of this race. The game's own "
@@ -864,6 +864,36 @@ function cm:force_change_cai_faction_personality(f, p)
     error("force_change_cai_faction_personality takes two KEYS")
   end
   record("personality", f, p)
+end
+-- The hidden bonus: a runtime bundle on a vanilla base, as wh3_campaign_ai.lua:1012 builds one.
+function cm:create_new_custom_effect_bundle(base)
+  if type(base) ~= "string" then error("create_new_custom_effect_bundle takes a bundle KEY") end
+  local b = {base = base, effects = {}}
+  function b:is_null_interface() return false end
+  function b:add_effect(k, scope, v)
+    if type(k) ~= "string" or type(scope) ~= "string" or type(v) ~= "number" then
+      error("add_effect takes (effect key, scope key, number)")
+    end
+    self.effects[#self.effects + 1] = k .. "/" .. scope .. "/" .. tostring(v)
+    return true
+  end
+  function b:set_duration(n) self.duration = n end
+  return b
+end
+-- Documented as (custom effect bundle, faction INTERFACE).
+function cm:apply_custom_effect_bundle_to_faction(b, f)
+  if type(b) ~= "table" or not b.effects or type(f) ~= "table" or not f.name then
+    error("apply_custom_effect_bundle_to_faction takes (custom bundle, faction interface)")
+  end
+  -- record keeps three fields: the duration rides on the base key.
+  record("custom_bundle", f:name(), b.base .. "|" .. tostring(b.duration), table.concat(b.effects, ","))
+end
+-- Documented as (bundle key, faction KEY).
+function cm:remove_effect_bundle(key, faction_key)
+  if type(key) ~= "string" or type(faction_key) ~= "string" then
+    error("remove_effect_bundle takes (bundle key, faction KEY)")
+  end
+  record("remove_effect_bundle", key, faction_key)
 end
 function cm:set_base_strategic_threat_score(f, score)
   record("set_base_strategic_threat_score", f:name(), score)
@@ -2729,6 +2759,7 @@ def _selftest():
     _selftest_runaway_merge()
     _selftest_chronicle()
     _selftest_empires_pick()
+    _selftest_empires_good_picks()
     _selftest_empires_schedule()
     _selftest_empires_shelter()
     _selftest_empires_levers()
@@ -3053,6 +3084,9 @@ def _selftest_empires_pick():
         # landless, though the engine still names a capital far from everyone
         {"name": "aa_empty", "regions": 0, "home": "r12", "subculture": EMP},
         {"name": "wh3_dlc29_chaos_invasion_confederation_owner", "regions": 9, "subculture": EMP},
+        # a second dwarf kin, so every major here is a good pick (group 42) and only size and
+        # spread decide
+        {"name": "aa_dwf_kin", "regions": 1, "minor": True, "subculture": DWF},
     ]
     c, _ = run_lua(world, events=ev, preload=roll, regions_spec=_line_regions(22))
     picks = picks_of(c)
@@ -3080,6 +3114,72 @@ def _selftest_empires_pick():
     picks = picks_of(c)
     assert picks == ["only_major", "minor_b", "minor_c"], picks
     print("selftest: empires pick ok")
+
+
+def _selftest_empires_good_picks():
+    """42. Better picks (2026-11-16, after six soaks): an empire grows fastest by taking in its kin,
+    so a good pick is one whose race the game lets confederate under computer control and that has
+    at least two living computer kin. The roll draws good picks first, and the great power is the
+    largest of them; a replacement and a newcomer taking the title must be good picks too. The
+    game refuses Vampire Counts, Vampire Coast and Chaos Dwarf confederation outright."""
+    EMP, DWF, GRN = "wh_main_sc_emp_empire", "wh_main_sc_dwf_dwarfs", "wh_main_sc_grn_greenskins"
+    VMP = "wh_main_sc_vmp_vampire_counts"
+    roll = {"derpy_director_seed": False}
+    ev = [{"event": "Eval", "turn": 1,
+           "code": "return table.concat(derpy_director:seed().ambitious, ',')"}]
+    kin = lambda sc, *names: [{"name": n, "regions": 1, "minor": True, "subculture": sc}
+                              for n in names]
+    world = [
+        # the two largest can never grow by kin: a race the game will not let confederate, and
+        # a race with no kin left
+        {"name": "vmp_big", "regions": 9, "owns": ["r1"], "subculture": VMP},
+        {"name": "lone_big", "regions": 8, "owns": ["r8"], "subculture": EMP},
+        {"name": "grn_a", "regions": 2, "owns": ["r15"], "subculture": GRN},
+        {"name": "dwf_a", "regions": 3, "owns": ["r22"], "subculture": DWF},
+    ] + kin(VMP, "zv1", "zv2", "zv3") + kin(GRN, "zg1", "zg2") + kin(DWF, "zd1", "zd2")
+    for rolls in ([1], [2], [3], [4]):
+        c, _ = run_lua(world, events=ev, preload=roll, regions_spec=_line_regions(22), seed=rolls)
+        picks = evals(c)[0].split(",")
+        assert picks[:2] == ["dwf_a", "grn_a"], (rolls, picks)     # good first, largest great
+        assert picks[2] in ("vmp_big", "lone_big"), (rolls, picks)
+    # A race switched off in MCT is no good pick: its kin could never be taken in.
+    c, _ = run_lua(world, events=ev, preload=roll, regions_spec=_line_regions(22),
+                   mct={"race_" + GRN: False})
+    assert evals(c)[0].split(",")[0] == "dwf_a" and evals(c)[0].split(",")[1] != "grn_a", evals(c)
+    # One kin is not enough, and the dead, a player, a rebel or a vassal of that race is no kin.
+    one = [f for f in world if f["name"] != "zd2"] + [
+        {"name": "zd_dead", "regions": 1, "dead": True, "subculture": DWF},
+        {"name": "zd_player", "regions": 1, "human": True, "subculture": DWF},
+        {"name": "zd_rebel", "regions": 1, "rebel": True, "subculture": DWF},
+        {"name": "zd_vassal", "regions": 1, "vassal_of": "lone_big", "subculture": DWF}]
+    c, _ = run_lua(one, events=ev, preload=roll, regions_spec=_line_regions(22))
+    assert evals(c)[0].split(",")[0] == "grn_a", evals(c)
+
+    # A replacement: the good pick before the faster grower that can never take in kin.
+    STATE = "return table.concat(derpy_director:seed().ambitious, ',')"
+    w = _empire_world(great=6, lesser=3, third=1) + [
+        # both clear of the empires that stay (r1, r10): only the pick rule tells them apart
+        {"name": "fast_vmp", "regions": 12, "owns": ["r18"], "subculture": VMP},
+        {"name": "slow_grn", "regions": 3, "owns": ["r22"], "subculture": GRN}] + \
+        kin(GRN, "zg1", "zg2") + kin(VMP, "zv1", "zv2")
+    c, _ = _empire_run(w, [{"event": "Eval", "turn": 20, "code": STATE}], start_turn=20)
+    assert "slow_grn" in evals(c)[0].split(",") and "fast_vmp" not in evals(c)[0], evals(c)
+    # A dead empire's place goes the same way: the good pick first, though the other is larger
+    # and still allowed.
+    w = [dict(f, dead=True) if f["name"] == "third" else f for f in w]
+    c, _ = _empire_run(w, [{"event": "Eval", "turn": 20, "code": STATE}], start_turn=20)
+    assert "slow_grn" in evals(c)[0].split(",") and "fast_vmp" not in evals(c)[0], evals(c)
+    # A newcomer takes the title only as a good pick: the larger vampire waits, the orc takes it.
+    w = _empire_world(great=20, lesser=10, third=8) + [
+        # both clear of the empires that stay (r1, r10): only the pick rule tells them apart
+        {"name": "vmp_giant", "regions": 30, "owns": ["r17"], "subculture": VMP},
+        {"name": "grn_giant", "regions": 25, "owns": ["r22"], "subculture": GRN}] + \
+        kin(VMP, "zv1", "zv2") + kin(GRN, "zg1", "zg2")
+    c, _ = _empire_run(w, [{"event": "Eval", "turn": 31,
+                            "code": "return tostring(cm:get_saved_value('derpy_director_empires').great)"}],
+                       start_turn=29)
+    assert evals(c) == ["grn_giant"], evals(c)
+    print("selftest: empires good picks ok")
 
 
 def _empire_world(great=6, lesser=3, third=2, extra=()):
@@ -3162,6 +3262,37 @@ def _selftest_empires_schedule():
     assert [x["i"] for x in ch if x["k"] == "empire_fade"] == ["dead_one", "stalled_one"], ch
     assert [(x["i"], x["n"]) for x in ch if x["k"] == "empire"] == [("grower_a", "2"),
                                                                       ("grower_b", "2")], ch
+    # A stalled empire is replaced only by a faction already larger than it (2026-11-16: soak 7
+    # dropped the largest AI faction for a smaller one). Here the only grower is no larger.
+    small = [{"name": "stalled_one", "regions": 1, "owns": ["r8"], "subculture": EMP},
+             {"name": "tiny", "regions": 1, "owns": ["r15"], "subculture": EMP}]
+    w = [f for f in _empire_world(great=12, extra=small) if f["name"] not in ("lesser", "third")]
+    c, _ = _empire_run(w, [setr("tiny", 1, 10), ev(CHRON_DUMP, 21)],
+                       preload=_empire_seed("great", "stalled_one"))
+    assert not [x for x in _chron(c) if x["k"] == "empire_fade"], _chron(c)
+    # The largest empire is never faded for stalling (2026-11-17: soaks 7 and 8 both dropped the
+    # Great Orthodoxy at turn 40, and both times it ended as the largest computer faction). Both
+    # empires are stalled at turn 20; only the smaller one gives way to the larger good grower.
+    GRN = "wh_main_sc_grn_greenskins"
+    kin = [{"name": n, "regions": 1, "minor": True, "subculture": GRN} for n in ("zg1", "zg2")]
+    w = [f for f in _empire_world(great=3, lesser=1, extra=[
+        {"name": "big_grn", "regions": 5, "owns": ["r18"], "subculture": GRN}] + kin)
+         if f["name"] != "third"]
+    c, _ = _empire_run(w, [ev(CHRON_DUMP, 21)], preload=_empire_seed("great", "lesser"))
+    assert [x["i"] for x in _chron(c) if x["k"] == "empire_fade"] == ["lesser"], _chron(c)
+    # A stalled empire gives way only to a good pick (2026-11-17: soak 8 replaced the Orthodoxy
+    # with Schwartzhafen, a Vampire Counts faction that can never take in kin).
+    VMP = "wh_main_sc_vmp_vampire_counts"
+    w = [f for f in _empire_world(great=12, lesser=1, extra=[
+        {"name": "big_vmp", "regions": 5, "owns": ["r18"], "subculture": VMP}] +
+        [{"name": n, "regions": 1, "minor": True, "subculture": VMP} for n in ("zv1", "zv2")])
+         if f["name"] != "third"]
+    c, _ = _empire_run(w, [ev(CHRON_DUMP, 21)], preload=_empire_seed("great", "lesser"))
+    assert not [x for x in _chron(c) if x["k"] == "empire_fade"], _chron(c)
+    # A dead empire's place is still filled when no good pick is left: an empty place helps nobody.
+    w = [dict(f, dead=True) if f["name"] == "lesser" else f for f in w]
+    c, _ = _empire_run(w, [ev(CHRON_DUMP, 21)], preload=_empire_seed("great", "lesser"))
+    assert "big_vmp" in [x["i"] for x in _chron(c) if x["k"] == "empire"], _chron(c)
     # A graduate is never replaced, shrunk or dead (spec 8).
     grad = {"derpy_director_empires": {"great": "great", "graduated": {"great": 5}}}
     for wg in (_empire_world(great=2), [dict(f, dead=True) if f["name"] == "great" else f
@@ -3379,6 +3510,25 @@ def _selftest_empires_levers():
             turn=41, until=53, scores=yes)
     mt = [int(x["t"]) for x in _chron(c) if x["k"] == "empire_merge"]
     assert mt == [41, 53], mt
+    # Relentless (2026-11-16): no 10-turn wait and no price, so both kin fold in on the next two
+    # helps, and the budget is left as it was.
+    c2 = run(world(great={"regions": 13}, weak_kin={"regions": 2},
+                   weak_kin2={"regions": 2, "owns": ["r_kin2"], "subculture": EMP}),
+             turn=41, until=44, scores=yes, mct={"empire_help": "relentless"})
+    mt = [int(x["t"]) for x in _chron(c2) if x["k"] == "empire_merge"]
+    assert mt == [41, 44], mt
+    assert not outs(c2, "cannot pay"), outs(c2, "cannot pay")
+    # Read on the merge's own turn: the budget refills to its cap by the next.
+    kin2 = world(great={"regions": 13}, weak_kin={"regions": 2},
+                 weak_kin2={"regions": 2, "owns": ["r_kin2"], "subculture": EMP})
+    paid, free = (budget(run(kin2, turn=41, scores=yes, **k))
+                  for k in ({}, {"mct": {"empire_help": "relentless"}}))
+    assert free == paid + 60, (free, paid)
+    # Nor does the turn's limit hold it: a merge already made this turn stops only the paid one.
+    spent = {"derpy_director_merge_turn": 41, "derpy_director_merge_count": 1}
+    assert merges(run(kin2, turn=41, scores=yes, preload=spent)) == []
+    assert merges(run(kin2, turn=41, scores=yes, preload=spent,
+                      mct={"empire_help": "relentless"})) == [("great", "weak_kin")]
     # Ahead of schedule: no help at all.
     c = run(world(great={"regions": 20, "wars": []}))
     assert not pushes(c) and not outs(c, "empire great helped"), pushes(c)
@@ -3400,6 +3550,10 @@ def _selftest_empires_great():
         if giant is not None:
             w.append(dict({"name": "giant", "regions": 25, "owns": ["r17"], "subculture": EMP},
                           **giant))
+            # two computer kin of the newcomer's race, so it is a good pick (group 42)
+            sc = giant.get("subculture", EMP)
+            w += [{"name": n, "regions": 1, "minor": True, "subculture": sc}
+                  for n in ("zz_kin_1", "zz_kin_2")]
         for f in w:
             if f["name"] in subs:
                 f.update(subs[f["name"]])
@@ -3469,7 +3623,9 @@ def _selftest_empires_pace():
     assert pots(c) == [("great", "true", "750")], pots(c)
     # The title moves at the check: the old holder's is handed back, then the new one's raised.
     w = _empire_world(great=20, lesser=10, third=8) + [
-        {"name": "giant", "regions": 25, "owns": ["r17"], "subculture": EMP}]
+        {"name": "giant", "regions": 25, "owns": ["r17"], "subculture": EMP},
+        # a second computer kin beside "great": the newcomer is a good pick (group 42)
+        {"name": "zz_kin", "regions": 1, "minor": True, "subculture": EMP}]
     c, _ = _empire_run(w, [ev("return 1", 31)], start_turn=29)
     assert pots(c) == [("great", "true", "750"), ("great", "false", "0"),
                        ("giant", "true", "750")], pots(c)
@@ -3509,8 +3665,9 @@ def _selftest_empires_pace():
 
 def _selftest_empires_cheats():
     """38. Phase 4: the optional cheats (spec 6b). Off by default; Generous pays an empire far
-    behind 5,000 gold, Relentless also copies its largest army without the general and settles one
-    ruin next to it. Once every 5 turns, never in multiplayer, free, and never chronicled."""
+    behind 5,000 gold once every 5 turns. Relentless (2026-11-16) adds nothing the player can see:
+    no army copy and no free ruin, but a hidden economy while an empire is behind, taken away when
+    it is not. Never in multiplayer, free, and never chronicled."""
     EMP = "wh_main_sc_emp_empire"
     regions = [{"key": "r_home", "adj": ["r_owned", "r_ruin"]},
                {"key": "r_owned", "adj": ["r_home"]},
@@ -3523,9 +3680,9 @@ def _selftest_empires_cheats():
     BUDGET = "return tostring(cm:get_saved_value('derpy_director_budget'))"
 
     # Turn 31: expected 15, so 6 settlements is far behind and 10 only behind.
-    def run(level=None, n=6, turn=31, until=None, **k):
+    def run(level=None, n=6, turn=31, until=None, events=(), **k):
         mct = dict({"empire_goal_turn": 80}, **({"empire_help": level} if level else {}))
-        evs = [{"event": "Eval", "turn": until or turn, "code": BUDGET},
+        evs = list(events) + [{"event": "Eval", "turn": until or turn, "code": BUDGET},
                {"event": "Eval", "turn": until or turn, "code": CHRON_DUMP}]
         c, _ = run_lua(world(n), events=evs, regions_spec=regions, start_turn=turn, mct=mct,
                        preload={"derpy_director_seed": dict(TEST_SEED, ambitious=["great"])}, **k)
@@ -3546,11 +3703,41 @@ def _selftest_empires_cheats():
     c = run("generous", turn=25, until=40)
     assert [int(x.split("turn ")[1].split(":")[0]) for x in outs(c, "empire great cheat")] == \
         [25, 30, 35, 40], outs(c, "empire great cheat")
+    # Relentless (2026-11-16): nothing the player can see appears - no army out of nowhere, no town
+    # changing hands - but an empire behind schedule runs a hidden economy, as CA's own AI does.
     relentless = run("relentless")
-    assert armies(relentless) == [("great", "u1,u2", "r_home")], armies(relentless)
-    assert ruins(relentless) == [("r_ruin", "great")], ruins(relentless)
+    assert gold(relentless) == [("great", "5000")], gold(relentless)
+    assert armies(relentless) == [] and ruins(relentless) == [], cheats(relentless)
     assert _chron(relentless) == _chron(natural), (_chron(relentless), _chron(natural))
+    bonus = lambda c: [tuple(x[1:]) for x in c if x[0] == "custom_bundle"]
+    dropped = lambda c: [tuple(x[1:3]) for x in c if x[0] == "remove_effect_bundle"]
+    WANT = ("great", "wh_main_bundle_dummy|0",
+            "wh_main_effect_force_all_campaign_upkeep/faction_to_force_own_unseen/-30,"
+            "wh_main_effect_force_all_campaign_recruitment_cost_all/faction_to_force_own_unseen/-30,"
+            "wh_main_effect_economy_gdp_mod_all/faction_to_region_own_unseen/30,"
+            "wh_main_effect_building_construction_cost_mod/faction_to_region_own_unseen/-30,"
+            "wh_main_effect_force_all_campaign_replenishment_rate/faction_to_force_own_unseen/10,"
+            "wh_main_effect_force_army_campaign_recruitment_points/faction_to_faction_own_unseen/1")
+    assert bonus(relentless) == [WANT], bonus(relentless)
+    assert bonus(run("relentless", n=10)) == [WANT]                  # behind is enough
+    assert bonus(run("relentless", n=30)) == []                      # ahead: none
+    assert bonus(natural) == [] and bonus(generous) == []
+    c = run("relentless", turn=31, until=36)                          # once, not every turn
+    assert bonus(c) == [WANT] and dropped(c) == [], (bonus(c), dropped(c))
+    # Caught up: taken away, once.
+    c = run("relentless", turn=31, until=34,
+            events=[{"event": "SetRegions", "instigator": "great", "n": 30, "turn": 33}])
+    assert dropped(c) == [("wh_main_bundle_dummy", "great")], dropped(c)
+    # The Empires switch off, or the help setting moved off Relentless: taken away.
+    held = {"derpy_director_empires": {"great": "great", "bonus": {"great": 20}}}
+    for mct in ({"empires": False}, {"empire_help": "natural"}):
+        c, _ = run_lua(world(6), events=[{"event": "Eval", "turn": 32, "code": "return 1"}],
+                       regions_spec=regions, start_turn=31,
+                       mct=dict({"empire_goal_turn": 80}, **mct),
+                       preload=dict(held, derpy_director_seed=dict(TEST_SEED, ambitious=["great"])))
+        assert dropped(c) == [("wh_main_bundle_dummy", "great")], (mct, dropped(c))
     assert not cheats(run("relentless", multiplayer=True))                           # Review Focus 4
+    assert bonus(run("relentless", multiplayer=True)) == []
     print("selftest: empires cheats ok")
 
 
@@ -3727,6 +3914,9 @@ def _selftest_merge():
     c, st = go(mct={"merge_price": 0})
     assert merges(c) == [("kin_big", "vic")] and budget(st) == off_budget(mct={"merge_price": 0})
     c, _ = go(events=_merge_conq(budget=59))
+    assert merges(c) == [] and outs(c, "no merge for vic: budget 59 cannot pay 60"), c
+    # Relentless frees an empire's merges only: a last stand still pays (2026-11-16).
+    c, _ = go(events=_merge_conq(budget=59), mct={"empire_help": "relentless"})
     assert merges(c) == [] and outs(c, "no merge for vic: budget 59 cannot pay 60"), c
     # At most 3 kin are asked: kin_d, fourth by size, is never reached once the first three refuse.
     four = _merge_world(**{"+kin_c": {"name": "kin_c", "regions": 2, "subculture": GRN},
@@ -4037,8 +4227,9 @@ def _selftest_long_run(CHD, DWF, regions, pair_world, ev2, yes):
     rise = dict(TEST_SEED)
     def budget_at(turn, start, seed_tbl=rise):
         evs = [{"event": "SetBudget", "n": start, "turn": turn - 1}, {"event": "Tick", "turn": turn}]
+        # Empires off: their help spends from this budget, and the ramp is what is measured here.
         _, st = run_lua(pair_world, events=evs, regions_spec=regions,
-                        preload={"derpy_director_seed": seed_tbl})
+                        preload={"derpy_director_seed": seed_tbl}, mct={"empires": False})
         return st["derpy_director_budget"]
     got = [budget_at(51, 0), budget_at(101, 0), budget_at(201, 0)]
     assert got == ["105", "140", "175"], got
@@ -4142,7 +4333,9 @@ def _selftest_storyteller(CHD, DWF, EMP, regions, pair_world, feud_world, ev2, y
     # are friends, and are never a hot grudge.
     assert "hot=%s/%s " % (CHD, DWF) in rolled[0], rolled
     # Three ambitious factions, never the player, the dead or the landless.
-    assert rolled[0].endswith("ambitious=ba_chd,bb_dwf,bc_dwf"), rolled
+    # Good picks first (2026-11-16): each dwarf has two living dwarf kin (ab_landless counts), and
+    # the game never lets computer Chaos Dwarfs confederate.
+    assert rolled[0].endswith("ambitious=bb_dwf,bc_dwf,ba_chd"), rolled
     told = shown(c)
     assert len(told) == 1 and told[0][1] == "ac_player" and told[0][3] == "30,40|false|7800" \
         and told[0][2].endswith("temper_rising_title"), told
